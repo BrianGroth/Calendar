@@ -1,0 +1,487 @@
+import React, { useEffect, useMemo, useRef, useState } from "react";
+
+// Two-Month Infinite Calendar — mobile friendly
+// - Shows exactly TWO months stacked vertically at any time
+// - Scrolls one month at a time (scroll-snap)
+// - Starts at the current month
+// - Infinite scroll forward/back by dynamically growing the list while keeping DOM small
+// - Monday-first weeks by default; uses user's locale for labels
+// - Includes US and NL (Netherlands) public holidays with movable + observed rules
+// - Adds a tiny self-test panel to validate holiday calculations
+
+export default function TwoMonthCalendarApp() {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [monthH, setMonthH] = useState(0);
+
+  useEffect(() => {
+    const calc = () => {
+      const h = Math.max(320, Math.round(window.innerHeight * 0.46));
+      setMonthH(h);
+      document.documentElement.style.setProperty("--month-h", `${h}px`);
+    };
+    calc();
+    window.addEventListener("resize", calc);
+    return () => window.removeEventListener("resize", calc);
+  }, []);
+
+  const INITIAL_EACH_SIDE = 18; // ~3 years each direction
+  const [offsets, setOffsets] = useState<number[]>(() =>
+    Array.from({ length: INITIAL_EACH_SIDE * 2 + 1 }, (_, i) => i - INITIAL_EACH_SIDE)
+  );
+
+  // Jump to current month after first height measurement
+  useEffect(() => {
+    if (!containerRef.current || !monthH) return;
+    const zeroIndex = offsets.indexOf(0);
+    if (zeroIndex >= 0) {
+      containerRef.current.scrollTop = zeroIndex * monthH;
+    }
+  }, [monthH]);
+
+  const GROW_CHUNK = 12;
+  const onScroll = () => {
+    const el = containerRef.current;
+    if (!el || !monthH) return;
+
+    const nearTop = el.scrollTop < monthH * 0.8;
+    const nearBottom = el.scrollTop + el.clientHeight > el.scrollHeight - monthH * 1.2;
+
+    if (nearTop) {
+      setOffsets((prev) => {
+        const min = prev[0];
+        const add = Array.from({ length: GROW_CHUNK }, (_, i) => min - (GROW_CHUNK - i));
+        // Maintain visual position after prepending
+        requestAnimationFrame(() => {
+          if (containerRef.current) containerRef.current.scrollTop += GROW_CHUNK * monthH;
+        });
+        return [...add, ...prev];
+      });
+    } else if (nearBottom) {
+      setOffsets((prev) => {
+        const max = prev[prev.length - 1];
+        const add = Array.from({ length: GROW_CHUNK }, (_, i) => max + i + 1);
+        return [...prev, ...add];
+      });
+    }
+  };
+
+  const goToToday = () => {
+    if (!containerRef.current || !monthH) return;
+    const idx = offsets.indexOf(0);
+    if (idx >= 0) {
+      containerRef.current.scrollTo({ top: idx * monthH, behavior: "smooth" });
+    } else {
+      const around = 18;
+      const fresh = Array.from({ length: around * 2 + 1 }, (_, i) => i - around);
+      setOffsets(fresh);
+      requestAnimationFrame(() => {
+        const el = containerRef.current;
+        if (el) el.scrollTo({ top: around * monthH, behavior: "smooth" });
+      });
+    }
+  };
+
+  const locale = useMemo(() => (typeof navigator !== "undefined" && navigator.language) || "en-US", []);
+
+  // Determine if we should show the self-tests panel (open via ?tests=1)
+  const showTests = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tests") === "1";
+
+  return (
+    <div className="w-full h-screen bg-neutral-50 flex flex-col">
+      <Header locale={locale} onToday={goToToday} />
+
+      <div
+        ref={containerRef}
+        onScroll={onScroll}
+        className="flex-1 overflow-y-scroll snap-y snap-mandatory [scroll-snap-stop:always]"
+        style={{ height: `calc(var(--month-h) * 2)` }}
+      >
+        <div className="mx-auto max-w-md sm:max-w-lg md:max-w-xl lg:max-w-2xl px-3">
+          {offsets.map((off) => (
+            <Month key={off} offset={off} monthH={monthH} locale={locale} />
+          ))}
+        </div>
+      </div>
+
+      <TodayFAB onClick={goToToday} />
+
+      {showTests && <SelfTests />}
+    </div>
+  );
+}
+
+function Header({ locale, onToday }: { locale: string; onToday: () => void }) {
+  const now = new Date();
+  const fmt = new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" });
+  const label = fmt.format(now);
+  return (
+    <div className="sticky top-0 z-10 bg-neutral-50/80 backdrop-blur border-b border-neutral-200">
+      <div className="mx-auto max-w-md sm:max-w-lg md:max-w-xl lg:max-w-2xl px-3 py-2 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Calendar</h1>
+          <p className="text-xs text-neutral-500">Starts on {label}</p>
+        </div>
+        <button
+          onClick={onToday}
+          className="px-3 py-1.5 rounded-xl border border-neutral-300 bg-white text-sm font-medium shadow-sm active:scale-[0.99]"
+        >
+          Today
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Month({ offset, monthH, locale }: { offset: number; monthH: number; locale: string }) {
+  const { year, month } = addMonths(getCurrentYM(), offset);
+  const monthLabel = new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" }).format(
+    new Date(year, month, 1)
+  );
+
+  const daysShort = getWeekdayLabels(locale, 1);
+  const grid = useMemo(() => buildMonthGrid(year, month, 1), [year, month]);
+
+  return (
+    <section
+      className="snap-start pt-3 pb-4"
+      style={{ height: `var(--month-h)` }}
+      aria-label={monthLabel}
+    >
+      <div className="rounded-2xl border border-neutral-200 shadow-sm bg-white h-full flex flex-col overflow-hidden">
+        <div className="px-4 pt-3 pb-2">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-lg font-semibold tracking-tight">{monthLabel}</h2>
+          </div>
+        </div>
+
+        <div className="px-2 grid grid-cols-7 gap-1 text-[11px] text-neutral-500 select-none">
+          {daysShort.map((d) => (
+            <div key={d} className="text-center py-1 font-medium">
+              {d}
+            </div>
+          ))}
+        </div>
+
+        <div className="flex-1 px-2 pb-2">
+          <div className="grid grid-cols-7 grid-rows-6 gap-1 h-full">
+            {grid.map((cell, i) => (
+              <DateCell key={i} cell={cell} locale={locale} />
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DateCell({ cell, locale }: { cell: DayCell; locale: string }) {
+  const today = isSameDate(cell.date, new Date());
+  const muted = !cell.inMonth;
+  const holidayNames = getHolidayNames(cell.date);
+
+  return (
+    <div
+      className={[
+        "rounded-xl border h-full w-full flex flex-col items-end justify-between p-1",
+        muted ? "border-neutral-200 text-neutral-400 bg-neutral-50" : "border-neutral-200 bg-white",
+      ].join(" ")}
+      aria-label={new Intl.DateTimeFormat(locale, { dateStyle: "full" }).format(cell.date)}
+    >
+      <div
+        className={[
+          "text-xs leading-none inline-flex items-center justify-center h-5 w-5 rounded-full select-none",
+          today ? "bg-black text-white" : "",
+          holidayNames.length ? "bg-red-500 text-white" : "",
+        ].join(" ")}
+      >
+        {cell.date.getDate()}
+      </div>
+      {holidayNames.length > 0 && (
+        <div className="w-full text-[9px] text-red-600 truncate text-left">{holidayNames.join(" · ")}</div>
+      )}
+    </div>
+  );
+}
+
+// ===== Calendar Utilities =====
+
+type YearMonth = { year: number; month: number };
+
+type DayCell = {
+  date: Date;
+  inMonth: boolean;
+};
+
+function getCurrentYM(): YearMonth {
+  const d = new Date();
+  return { year: d.getFullYear(), month: d.getMonth() };
+}
+
+function addMonths(ym: YearMonth, delta: number): YearMonth {
+  const d = new Date(ym.year, ym.month + delta, 1);
+  return { year: d.getFullYear(), month: d.getMonth() };
+}
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+function buildMonthGrid(year: number, month: number, weekStart: 0 | 1 = 1): DayCell[] {
+  const firstOfMonth = new Date(year, month, 1);
+  const firstWeekday = firstOfMonth.getDay();
+  const firstIdx = (firstWeekday - weekStart + 7) % 7;
+  const dim = daysInMonth(year, month);
+
+  const prev = addMonths({ year, month }, -1);
+  const dimPrev = daysInMonth(prev.year, prev.month);
+
+  const cells: DayCell[] = [];
+  for (let i = 0; i < firstIdx; i++) {
+    const day = dimPrev - firstIdx + i + 1;
+    cells.push({ date: new Date(prev.year, prev.month, day), inMonth: false });
+  }
+  for (let d = 1; d <= dim; d++) {
+    cells.push({ date: new Date(year, month, d), inMonth: true });
+  }
+  while (cells.length < 42) {
+    const nextDay = cells.length - (firstIdx + dim) + 1;
+    const next = addMonths({ year, month }, 1);
+    cells.push({ date: new Date(next.year, next.month, nextDay), inMonth: false });
+  }
+  return cells;
+}
+
+function getWeekdayLabels(locale: string, weekStart: 0 | 1 = 1): string[] {
+  const baseMonday = new Date(2021, 0, 4); // Monday
+  const labels: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(baseMonday);
+    d.setDate(baseMonday.getDate() + i + (weekStart === 1 ? 0 : -1));
+    labels.push(d.toLocaleDateString(locale, { weekday: "short" }));
+  }
+  return labels;
+}
+
+function isSameDate(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function TodayFAB({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="fixed bottom-4 right-4 z-20 rounded-full shadow-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-semibold active:scale-[0.98]"
+      aria-label="Jump to today"
+    >
+      Today
+    </button>
+  );
+}
+
+// ===== Holidays & Observed Logic =====
+
+// Nth weekday of a month (weekday: 0=Sun..6=Sat)
+function nthWeekdayOfMonth(year: number, month: number, weekday: number, n: number): Date {
+  const first = new Date(year, month, 1);
+  const firstWeekday = first.getDay();
+  const diff = (7 + weekday - firstWeekday) % 7;
+  const day = 1 + diff + (n - 1) * 7;
+  return new Date(year, month, day);
+}
+
+// Last weekday of a month
+function lastWeekdayOfMonth(year: number, month: number, weekday: number): Date {
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const last = new Date(year, month, lastDay);
+  const diff = (7 + last.getDay() - weekday) % 7;
+  return new Date(year, month, lastDay - diff);
+}
+
+// Western Easter (Meeus/Jones/Butcher)
+function easterSunday(year: number): Date {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31) - 1;
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(year, month, day);
+}
+
+function addDays(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function sameYMD(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function observedDate(date: Date): Date {
+  const dow = date.getDay();
+  if (dow === 0) return addDays(date, 1); // Sunday -> Monday
+  if (dow === 6) return addDays(date, -1); // Saturday -> Friday
+  return date;
+}
+
+// Build a mapping of observed US fixed-date holidays for nearby years (handles cross-year spillover for New Year's)
+function buildUSObservedMap(year: number): Record<string, string> {
+  const map: Record<string, string> = {};
+  const add = (dt: Date, label: string) => {
+    const obs = observedDate(dt);
+    if (!sameYMD(obs, dt)) {
+      const key = `${obs.getFullYear()}-${obs.getMonth()}-${obs.getDate()}`;
+      map[key] = `${label} (Observed)`;
+    }
+  };
+  const labels = [
+    [0, 1, "New Year's Day"],
+    [5, 19, "Juneteenth"],
+    [6, 4, "Independence Day"],
+    [10, 11, "Veterans Day"],
+    [11, 25, "Christmas Day"],
+  ] as const;
+  for (const y of [year - 1, year, year + 1]) {
+    for (const [m, d, label] of labels) add(new Date(y, m, d), label);
+  }
+  return map;
+}
+
+function getHolidayNames(date: Date): string[] {
+  const y = date.getFullYear();
+  const m = date.getMonth();
+  const d = date.getDate();
+  const names: string[] = [];
+
+  // US fixed-date (actual days)
+  if (m === 0 && d === 1) names.push("New Year's Day");
+  if (m === 5 && d === 19) names.push("Juneteenth");
+  if (m === 6 && d === 4) names.push("Independence Day");
+  if (m === 10 && d === 11) names.push("Veterans Day");
+  if (m === 11 && d === 25) names.push("Christmas Day");
+
+  // US floating
+  if (sameYMD(date, nthWeekdayOfMonth(y, 0, 1, 3))) names.push("Martin Luther King Jr. Day"); // 3rd Mon Jan
+  if (sameYMD(date, nthWeekdayOfMonth(y, 1, 1, 3))) names.push("Presidents' Day"); // 3rd Mon Feb
+  if (sameYMD(date, lastWeekdayOfMonth(y, 4, 1))) names.push("Memorial Day"); // last Mon May
+  if (sameYMD(date, nthWeekdayOfMonth(y, 8, 1, 1))) names.push("Labor Day"); // 1st Mon Sep
+  if (sameYMD(date, nthWeekdayOfMonth(y, 9, 1, 2))) names.push("Columbus Day"); // 2nd Mon Oct
+  if (sameYMD(date, nthWeekdayOfMonth(y, 10, 4, 4))) names.push("Thanksgiving"); // 4th Thu Nov
+
+  // US observed (handles cross-year)
+  const obsMap = buildUSObservedMap(y);
+  const key = `${y}-${m}-${d}`;
+  if (obsMap[key]) names.push(obsMap[key]);
+
+  // NL fixed
+  if (m === 0 && d === 1) names.push("Nieuwjaarsdag");
+  // Koningsdag: Apr 27, unless Sunday -> Apr 26
+  const kingsDaySunday = new Date(y, 3, 27).getDay() === 0; // April is 3
+  if ((m === 3 && d === 27 && !kingsDaySunday) || (m === 3 && d === 26 && kingsDaySunday)) {
+    names.push("Koningsdag");
+  }
+  // Bevrijdingsdag: May 5
+  if (m === 4 && d === 5) names.push("Bevrijdingsdag");
+  // Christmas (NL)
+  if (m === 11 && d === 25) names.push("Eerste Kerstdag");
+  if (m === 11 && d === 26) names.push("Tweede Kerstdag");
+
+  // NL Easter-based
+  const easter = easterSunday(y);
+  const goodFriday = addDays(easter, -2);
+  const easterMon = addDays(easter, 1);
+  const ascension = addDays(easter, 39);
+  const pentecostSun = addDays(easter, 49);
+  const pentecostMon = addDays(easter, 50);
+
+  if (sameYMD(date, goodFriday)) names.push("Goede Vrijdag");
+  if (sameYMD(date, easter)) names.push("Eerste Paasdag");
+  if (sameYMD(date, easterMon)) names.push("Tweede Paasdag");
+  if (sameYMD(date, ascension)) names.push("Hemelvaart");
+  if (sameYMD(date, pentecostSun)) names.push("Eerste Pinksterdag");
+  if (sameYMD(date, pentecostMon)) names.push("Tweede Pinksterdag");
+
+  return names;
+}
+
+// ===== Minimal self-tests (open with ?tests=1 in the URL) =====
+
+function SelfTests() {
+  type T = { date: Date; expects: string[]; note?: string };
+  const cases: T[] = [
+    // US observed across year boundary (Jan 1, 2022 was Saturday)
+    { date: new Date(2021, 11, 31), expects: ["New Year's Day (Observed)"], note: "NYD 2022 observed Fri" },
+    // US observed when Jan 1, 2023 was Sunday
+    { date: new Date(2023, 0, 2), expects: ["New Year's Day (Observed)"] },
+    // US Thanksgiving 2024
+    { date: new Date(2024, 10, 28), expects: ["Thanksgiving"] },
+    // US Memorial Day 2025 (last Mon of May = 26)
+    { date: new Date(2025, 4, 26), expects: ["Memorial Day"] },
+    // US Labor Day 2024 (1st Mon Sep = 2)
+    { date: new Date(2024, 8, 2), expects: ["Labor Day"] },
+
+    // NL: Koningsdag shift when 27 Apr is Sunday (2025)
+    { date: new Date(2025, 3, 26), expects: ["Koningsdag"], note: "Shift from 27th -> 26th" },
+    // NL: Easter-related 2024
+    { date: new Date(2024, 2, 29), expects: ["Goede Vrijdag"] },
+    { date: new Date(2024, 2, 31), expects: ["Eerste Paasdag"] },
+    { date: new Date(2024, 3, 1), expects: ["Tweede Paasdag"] },
+    // NL: Ascension 2024 (May 9)
+    { date: new Date(2024, 4, 9), expects: ["Hemelvaart"] },
+    // NL: Pentecost Monday 2024 (May 20)
+    { date: new Date(2024, 4, 20), expects: ["Tweede Pinksterdag"] },
+    // NL: Christmas
+    { date: new Date(2024, 11, 25), expects: ["Eerste Kerstdag"] },
+    { date: new Date(2024, 11, 26), expects: ["Tweede Kerstdag"] },
+  ];
+
+  const results = cases.map((c) => {
+    const got = getHolidayNames(c.date);
+    const ok = c.expects.every((e) => got.includes(e));
+    // Console assertions for good measure
+    try {
+      console.assert(ok, `${c.date.toDateString()} expected ${c.expects.join(", ")} but got ${got.join(", ")}`);
+    } catch {}
+    return { date: c.date.toDateString(), expected: c.expects.join(" | "), got: got.join(" | "), pass: ok, note: c.note };
+  });
+
+  return (
+    <div className="fixed left-2 bottom-2 bg-white/95 border border-neutral-300 rounded-xl shadow p-3 max-w-[92vw]">
+      <div className="text-xs font-semibold mb-2">Self-tests</div>
+      <div className="max-h-52 overflow-auto">
+        <table className="text-[11px]">
+          <thead>
+            <tr className="text-left">
+              <th className="pr-3">Date</th>
+              <th className="pr-3">Expected</th>
+              <th className="pr-3">Got</th>
+              <th className="pr-3">Pass</th>
+              <th>Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            {results.map((r, i) => (
+              <tr key={i} className={r.pass ? "text-green-700" : "text-red-700"}>
+                <td className="pr-3 whitespace-nowrap">{r.date}</td>
+                <td className="pr-3">{r.expected}</td>
+                <td className="pr-3">{r.got || "—"}</td>
+                <td className="pr-3">{r.pass ? "✓" : "✗"}</td>
+                <td>{r.note || ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-2 text-[10px] text-neutral-500">(Add <code>?tests=1</code> to the URL to show this panel.)</div>
+    </div>
+  );
+}
