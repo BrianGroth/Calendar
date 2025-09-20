@@ -190,11 +190,12 @@
       // Append more months when within 300px of the bottom
       if (container.scrollTop + container.clientHeight > container.scrollHeight - 300) {
         loadedMonths += 12;
-        container.onscroll = null; // prevent multiple triggers
+        container.onscroll = null;
         render();
       }
-      // Prepend earlier months when within 300px of the top
-      if (container.scrollTop < 300 && startYear * 12 + startMonth > 0) {
+      // Prepend earlier months when within 300px of the top.
+      // Removing any lower bound on the starting month allows infinite scrolling backwards.
+      if (container.scrollTop < 300) {
         const monthsToPrepend = 12;
         let newMonth = startMonth - monthsToPrepend;
         let newYear = startYear;
