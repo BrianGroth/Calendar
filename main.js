@@ -1,21 +1,19 @@
 /*
- * Vanilla JS infinite-scroll calendar.
- * - Scroll up to go forward one month at a time.
- * - Scroll down to go backward one month at a time.
- * - Both US and Netherlands holidays are highlighted by default.
+ * Infinite-scroll calendar with smooth transitions.
+ * - Scroll up to go forward one month.
+ * - Scroll down to go back one month.
+ * - Highlights US and Netherlands holidays by default.
+ * - Smoothly adjusts scroll position when months are added.
  */
 
 (function () {
-  // Start at the current year and month
   let startYear = new Date().getFullYear();
   let startMonth = new Date().getMonth();
   const showUSHolidays = true;
   const showNLHolidays = true;
-  // Begin with a reasonable range of months; this will grow as you scroll
   let loadedMonths = 24;
   const root = document.getElementById('root');
 
-  // Compute Easter Sunday (Gregorian)
   function getEasterDate(year) {
     const a = year % 19;
     const b = Math.floor(year / 100);
@@ -34,7 +32,6 @@
     return new Date(year, month - 1, day);
   }
 
-  // nth weekday utility (n>0 = nth, n<0 = last)
   function getNthWeekdayOfMonth(year, monthIndex, weekday, n) {
     if (n > 0) {
       const first = new Date(year, monthIndex, 1);
@@ -50,7 +47,6 @@
     }
   }
 
-  // US holidays
   function getUSHolidays(year) {
     const holidays = {};
     holidays[`1-1`] = "New Year’s Day";
@@ -67,7 +63,6 @@
     return holidays;
   }
 
-  // Netherlands holidays
   function getNLHolidays(year) {
     const holidays = {};
     holidays[`1-1`] = "Nieuwjaarsdag";
@@ -91,7 +86,6 @@
     return holidays;
   }
 
-  // Build an array of months starting at (startYear,startMonth)
   function generateMonths(year, monthIndex, count) {
     const months = [];
     for (let i = 0; i < count; i++) {
@@ -133,7 +127,8 @@
     root.innerHTML = '';
 
     const wrapper = createElement('div', 'flex flex-col h-screen p-4 box-border');
-    const container = createElement('div', 'overflow-y-auto flex-1');
+    // 'scroll-smooth' enables smooth scroll transitions via Tailwind
+    const container = createElement('div', 'overflow-y-auto flex-1 scroll-smooth');
     const grid = createElement('div', 'grid grid-cols-1 sm:grid-cols-2 gap-6');
 
     const months = generateMonths(startYear, startMonth, loadedMonths);
@@ -176,16 +171,16 @@
     wrapper.appendChild(container);
     root.appendChild(wrapper);
 
-    // Scroll handler: loads one month at a time
     container.onscroll = function () {
-      // Near bottom (after scroll inversion = scrolling up) -> load future month
+      // Near bottom -> append one future month
       if (container.scrollTop + container.clientHeight > container.scrollHeight - 300) {
         loadedMonths += 1;
         container.onscroll = null;
         render();
       }
-      // Near top (after scroll inversion = scrolling down) -> load past month
+      // Near top -> prepend one past month
       if (container.scrollTop < 300) {
+        const prevScrollTop = container.scrollTop;
         let newMonth = startMonth - 1;
         let newYear = startYear;
         if (newMonth < 0) {
@@ -199,17 +194,18 @@
         const oldHeight = container.scrollHeight;
         render();
         const newHeight = container.scrollHeight;
-        container.scrollTop += newHeight - oldHeight;
+        const diff = newHeight - oldHeight;
+        // Smoothly adjust scroll position after prepending
+        container.scrollTo({ top: prevScrollTop + diff, behavior: 'smooth' });
       }
     };
 
-    // Invert wheel scrolling so up means forward and down means backward
+    // Invert wheel scrolling: up moves forward, down moves backward
     container.onwheel = function (e) {
       e.preventDefault();
       container.scrollTop += -e.deltaY;
     };
   }
 
-  // Initial render
   render();
 })();
