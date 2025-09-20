@@ -1,226 +1,429 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-    <title>Two-Month Infinite Calendar</title>
-    <!-- Tailwind via CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-  </head>
-  <body class="bg-neutral-50 h-screen overflow-hidden">
-    <div id="root"></div>
-    <script> 
-      /*
- * Infinite-scroll calendar with smooth transitions.
- * - Scroll up to go forward one month.
- * - Scroll down to go back one month.
- * - Highlights US and Netherlands holidays by default.
- * - Smoothly adjusts scroll position when months are added.
- */
-
-(function () {
-  let startYear = new Date().getFullYear();
-  let startMonth = new Date().getMonth();
-  const showUSHolidays = true;
-  const showNLHolidays = true;
-  let loadedMonths = 24;
-  const root = document.getElementById('root');
-
-  function getEasterDate(year) {
-    const a = year % 19;
-    const b = Math.floor(year / 100);
-    const c = year % 100;
-    const d = Math.floor(b / 4);
-    const e = b % 4;
-    const f = Math.floor((b + 8) / 25);
-    const g = Math.floor((b - f + 1) / 3);
-    const h = (19 * a + b - d - g + 15) % 30;
-    const i = Math.floor(c / 4);
-    const k = c % 4;
-    const l = (32 + 2 * e + 2 * i - h - k) % 7;
-    const m = Math.floor((a + 11 * h + 22 * l) / 451);
-    const month = Math.floor((h + l - 7 * m + 114) / 31);
-    const day = ((h + l - 7 * m + 114) % 31) + 1;
-    return new Date(year, month - 1, day);
-  }
-
-  function getNthWeekdayOfMonth(year, monthIndex, weekday, n) {
-    if (n > 0) {
-      const first = new Date(year, monthIndex, 1);
-      const firstWeekday = first.getDay();
-      const offset = (weekday - firstWeekday + 7) % 7;
-      return 1 + offset + 7 * (n - 1);
-    } else {
-      const last = new Date(year, monthIndex + 1, 0);
-      const lastDay = last.getDate();
-      const lastWeekday = last.getDay();
-      const offset = (lastWeekday - weekday + 7) % 7;
-      return lastDay - offset;
-    }
-  }
-
-  function getUSHolidays(year) {
-    const holidays = {};
-    holidays[`1-1`] = "New Year’s Day";
-    holidays[`6-19`] = "Juneteenth";
-    holidays[`7-4`] = "Independence Day";
-    holidays[`11-11`] = "Veterans Day";
-    holidays[`12-25`] = "Christmas Day";
-    holidays[`1-${getNthWeekdayOfMonth(year, 0, 1, 3)}`] = "Martin Luther King Jr. Day";
-    holidays[`2-${getNthWeekdayOfMonth(year, 1, 1, 3)}`] = "Presidents’ Day";
-    holidays[`5-${getNthWeekdayOfMonth(year, 4, 1, -1)}`] = "Memorial Day";
-    holidays[`9-${getNthWeekdayOfMonth(year, 8, 1, 1)}`] = "Labor Day";
-    holidays[`10-${getNthWeekdayOfMonth(year, 9, 1, 2)}`] = "Columbus Day";
-    holidays[`11-${getNthWeekdayOfMonth(year, 10, 4, 4)}`] = "Thanksgiving";
-    return holidays;
-  }
-
-  function getNLHolidays(year) {
-    const holidays = {};
-    holidays[`1-1`] = "Nieuwjaarsdag";
-    holidays[`4-27`] = "Koningsdag";
-    holidays[`5-5`] = "Bevrijdingsdag";
-    holidays[`12-25`] = "Eerste Kerstdag";
-    holidays[`12-26`] = "Tweede Kerstdag";
-    const easter = getEasterDate(year);
-    const goodFriday = new Date(easter);
-    goodFriday.setDate(goodFriday.getDate() - 2);
-    holidays[`${goodFriday.getMonth() + 1}-${goodFriday.getDate()}`] = "Goede Vrijdag";
-    const easterMonday = new Date(easter);
-    easterMonday.setDate(easterMonday.getDate() + 1);
-    holidays[`${easterMonday.getMonth() + 1}-${easterMonday.getDate()}`] = "Tweede Paasdag";
-    const ascension = new Date(easter);
-    ascension.setDate(ascension.getDate() + 39);
-    holidays[`${ascension.getMonth() + 1}-${ascension.getDate()}`] = "Hemelvaart";
-    const whitMonday = new Date(easter);
-    whitMonday.setDate(whitMonday.getDate() + 50);
-    holidays[`${whitMonday.getMonth() + 1}-${whitMonday.getDate()}`] = "Tweede Pinksterdag";
-    return holidays;
-  }
-
-  function generateMonths(year, monthIndex, count) {
-    const months = [];
-    for (let i = 0; i < count; i++) {
-      const y = year + Math.floor((monthIndex + i) / 12);
-      const m = (monthIndex + i) % 12;
-      const daysInMonth = new Date(y, m + 1, 0).getDate();
-      const usHolidays = showUSHolidays ? getUSHolidays(y) : {};
-      const nlHolidays = showNLHolidays ? getNLHolidays(y) : {};
-      const days = [];
-      for (let d = 1; d <= daysInMonth; d++) {
-        const date = new Date(y, m, d);
-        const key = `${m + 1}-${d}`;
-        let holidayName = null;
-        if (showUSHolidays && usHolidays[key]) holidayName = usHolidays[key];
-        if (showNLHolidays && nlHolidays[key]) {
-          holidayName = holidayName ? `${holidayName} / ${nlHolidays[key]}` : nlHolidays[key];
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendar App</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        days.push({ date, holidayName });
-      }
-      months.push({ year: y, monthIndex: m, days });
-    }
-    return months;
-  }
 
-  const monthNames = [
-    'January','February','March','April','May','June',
-    'July','August','September','October','November','December'
-  ];
-  const weekdayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-
-  function createElement(tag, className, text) {
-    const el = document.createElement(tag);
-    if (className) el.className = className;
-    if (text !== undefined) el.textContent = text;
-    return el;
-  }
-
-  function render() {
-    root.innerHTML = '';
-
-    const wrapper = createElement('div', 'flex flex-col h-screen p-4 box-border');
-    // 'scroll-smooth' enables smooth scroll transitions via Tailwind
-    const container = createElement('div', 'overflow-y-auto flex-1 scroll-smooth');
-    const grid = createElement('div', 'grid grid-cols-1 sm:grid-cols-2 gap-6');
-
-    const months = generateMonths(startYear, startMonth, loadedMonths);
-    months.forEach(({ year, monthIndex, days }) => {
-      const monthEl = createElement('div', 'border rounded bg-white shadow p-4 flex flex-col');
-      monthEl.appendChild(createElement('div', 'text-center font-semibold mb-2', `${monthNames[monthIndex]} ${year}`));
-      const weekdaysRow = createElement('div', 'grid grid-cols-7 text-xs font-medium text-gray-500 mb-1');
-      weekdayNames.forEach(wd => weekdaysRow.appendChild(createElement('div','text-center', wd)));
-      monthEl.appendChild(weekdaysRow);
-      const daysGrid = createElement('div', 'grid grid-cols-7 gap-1 flex-1 text-center text-sm');
-      const firstDayOfWeek = new Date(year, monthIndex, 1).getDay();
-      for (let b = 0; b < firstDayOfWeek; b++) {
-        daysGrid.appendChild(createElement('div'));
-      }
-      days.forEach(({ date, holidayName }) => {
-        const day = date.getDate();
-        const isToday = date.toDateString() === new Date().toDateString();
-        const isHoliday = !!holidayName;
-        let bgClass = '';
-        if (isHoliday && showUSHolidays && showNLHolidays) bgClass = 'bg-green-200';
-        else if (isHoliday && showUSHolidays) bgClass = 'bg-red-200';
-        else if (isHoliday && showNLHolidays) bgClass = 'bg-blue-200';
-        const dayEl = createElement('div', `relative p-2 rounded ${bgClass}`);
-        if (isToday) dayEl.className += ' ring-2 ring-blue-500';
-        dayEl.appendChild(createElement('span', null, String(day)));
-        if (isHoliday) {
-          const tooltip = createElement('span',
-            'absolute -top-1 left-1/2 transform -translate-x-1/2 bg-yellow-100 text-xs px-1 py-px rounded shadow'
-          );
-          tooltip.textContent = holidayName;
-          dayEl.appendChild(tooltip);
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            overflow-x: hidden;
+            height: 100vh;
         }
-        daysGrid.appendChild(dayEl);
-      });
-      monthEl.appendChild(daysGrid);
-      grid.appendChild(monthEl);
-    });
 
-    container.appendChild(grid);
-    wrapper.appendChild(container);
-    root.appendChild(wrapper);
-
-    container.onscroll = function () {
-      // Near bottom -> append one future month
-      if (container.scrollTop + container.clientHeight > container.scrollHeight - 300) {
-        loadedMonths += 1;
-        container.onscroll = null;
-        render();
-      }
-      // Near top -> prepend one past month
-      if (container.scrollTop < 300) {
-        const prevScrollTop = container.scrollTop;
-        let newMonth = startMonth - 1;
-        let newYear = startYear;
-        if (newMonth < 0) {
-          newYear -= 1;
-          newMonth = 11;
+        .calendar-container {
+            height: 100vh;
+            overflow-y: auto;
+            scroll-behavior: smooth;
+            position: relative;
         }
-        startYear = newYear;
-        startMonth = newMonth;
-        loadedMonths += 1;
-        container.onscroll = null;
-        const oldHeight = container.scrollHeight;
-        render();
-        const newHeight = container.scrollHeight;
-        const diff = newHeight - oldHeight;
-        // Smoothly adjust scroll position after prepending
-        container.scrollTo({ top: prevScrollTop + diff, behavior: 'smooth' });
-      }
-    };
 
-    // Invert wheel scrolling: up moves forward, down moves backward
-    container.onwheel = function (e) {
-      e.preventDefault();
-      container.scrollTop += -e.deltaY;
-    };
-  }
+        .month {
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
 
-  render();
-})();
+        .month-header {
+            text-align: center;
+            font-size: 1.8em;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #4a5568;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .days-header {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 1px;
+            margin-bottom: 10px;
+        }
+
+        .day-header {
+            text-align: center;
+            font-weight: 600;
+            color: #718096;
+            padding: 10px 0;
+            font-size: 0.9em;
+        }
+
+        .days-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 1px;
+        }
+
+        .day {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            font-size: 0.9em;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+            background: rgba(255, 255, 255, 0.5);
+        }
+
+        .day:hover {
+            background: rgba(103, 126, 234, 0.2);
+            transform: scale(1.05);
+        }
+
+        .day.other-month {
+            color: #cbd5e0;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .day.current-day {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            font-weight: 700;
+            box-shadow: 0 4px 12px rgba(103, 126, 234, 0.3);
+        }
+
+        .day.holiday {
+            background: linear-gradient(45deg, #f093fb, #f5576c);
+            color: white;
+            font-weight: 600;
+        }
+
+        .day.holiday.other-month {
+            background: rgba(240, 147, 251, 0.3);
+            color: #cbd5e0;
+        }
+
+        .holiday-indicator {
+            position: absolute;
+            bottom: 2px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4px;
+            height: 4px;
+            background: #f5576c;
+            border-radius: 50%;
+        }
+
+        .day.holiday .holiday-indicator {
+            background: white;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: white;
+            font-size: 1.1em;
+        }
+
+        @media (max-width: 480px) {
+            .month {
+                margin: 0 10px 20px 10px;
+                padding: 15px;
+            }
+            
+            .month-header {
+                font-size: 1.5em;
+                margin-bottom: 15px;
+            }
+            
+            .day {
+                font-size: 0.8em;
+            }
+            
+            .day-header {
+                font-size: 0.8em;
+                padding: 8px 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="calendar-container" id="calendar-container">
+        <div id="calendar-content"></div>
+    </div>
+
+    <script>
+        class CalendarApp {
+            constructor() {
+                this.container = document.getElementById('calendar-content');
+                this.currentDate = new Date();
+                this.loadedMonths = new Set();
+                this.holidays = {};
+                
+                this.initHolidays();
+                this.init();
+                this.setupScrollListener();
+            }
+
+            initHolidays() {
+                // US Federal Holidays (fixed dates and calculated)
+                this.holidays.US = {
+                    "01-01": "New Year's Day",
+                    "07-04": "Independence Day",
+                    "11-11": "Veterans Day",
+                    "12-25": "Christmas Day"
+                };
+
+                // Netherlands Holidays
+                this.holidays.NL = {
+                    "01-01": "New Year's Day",
+                    "04-27": "King's Day",
+                    "05-05": "Liberation Day",
+                    "12-25": "Christmas Day",
+                    "12-26": "Boxing Day"
+                };
+            }
+
+            getEasterDate(year) {
+                const a = year % 19;
+                const b = Math.floor(year / 100);
+                const c = year % 100;
+                const d = Math.floor(b / 4);
+                const e = b % 4;
+                const f = Math.floor((b + 8) / 25);
+                const g = Math.floor((b - f + 1) / 3);
+                const h = (19 * a + b - d - g + 15) % 30;
+                const i = Math.floor(c / 4);
+                const k = c % 4;
+                const l = (32 + 2 * e + 2 * i - h - k) % 7;
+                const m = Math.floor((a + 11 * h + 22 * l) / 451);
+                const month = Math.floor((h + l - 7 * m + 114) / 31);
+                const day = ((h + l - 7 * m + 114) % 31) + 1;
+                return new Date(year, month - 1, day);
+            }
+
+            getMovingHolidays(year) {
+                const holidays = {};
+                
+                // Easter-based holidays
+                const easter = this.getEasterDate(year);
+                const goodFriday = new Date(easter.getTime() - 2 * 24 * 60 * 60 * 1000);
+                const easterMonday = new Date(easter.getTime() + 1 * 24 * 60 * 60 * 1000);
+                const ascension = new Date(easter.getTime() + 39 * 24 * 60 * 60 * 1000);
+                const whitsun = new Date(easter.getTime() + 49 * 24 * 60 * 60 * 1000);
+                const whitMonday = new Date(easter.getTime() + 50 * 24 * 60 * 60 * 1000);
+
+                holidays[this.formatDate(goodFriday)] = "Good Friday";
+                holidays[this.formatDate(easter)] = "Easter";
+                holidays[this.formatDate(easterMonday)] = "Easter Monday";
+                holidays[this.formatDate(ascension)] = "Ascension Day";
+                holidays[this.formatDate(whitsun)] = "Whit Sunday";
+                holidays[this.formatDate(whitMonday)] = "Whit Monday";
+
+                // US Labor Day (first Monday in September)
+                const laborDay = new Date(year, 8, 1);
+                while (laborDay.getDay() !== 1) {
+                    laborDay.setDate(laborDay.getDate() + 1);
+                }
+                holidays[this.formatDate(laborDay)] = "Labor Day (US)";
+
+                // US Thanksgiving (fourth Thursday in November)
+                const thanksgiving = new Date(year, 10, 1);
+                while (thanksgiving.getDay() !== 4) {
+                    thanksgiving.setDate(thanksgiving.getDate() + 1);
+                }
+                thanksgiving.setDate(thanksgiving.getDate() + 21);
+                holidays[this.formatDate(thanksgiving)] = "Thanksgiving";
+
+                // Martin Luther King Jr. Day (third Monday in January)
+                const mlkDay = new Date(year, 0, 1);
+                while (mlkDay.getDay() !== 1) {
+                    mlkDay.setDate(mlkDay.getDate() + 1);
+                }
+                mlkDay.setDate(mlkDay.getDate() + 14);
+                holidays[this.formatDate(mlkDay)] = "MLK Jr. Day";
+
+                return holidays;
+            }
+
+            formatDate(date) {
+                return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+            }
+
+            isHoliday(date) {
+                const dateStr = this.formatDate(date);
+                const year = date.getFullYear();
+                const movingHolidays = this.getMovingHolidays(year);
+                
+                return this.holidays.US[dateStr] || this.holidays.NL[dateStr] || movingHolidays[dateStr];
+            }
+
+            init() {
+                // Load current month at top, previous month below
+                this.renderMonth(this.currentDate.getFullYear(), this.currentDate.getMonth());
+                this.renderMonth(this.currentDate.getFullYear(), this.currentDate.getMonth() - 1);
+            }
+
+            renderMonth(year, month) {
+                // Handle year boundary
+                if (month < 0) {
+                    month = 11;
+                    year--;
+                } else if (month > 11) {
+                    month = 0;
+                    year++;
+                }
+
+                const monthKey = `${year}-${month}`;
+                if (this.loadedMonths.has(monthKey)) return;
+
+                this.loadedMonths.add(monthKey);
+
+                const monthDiv = document.createElement('div');
+                monthDiv.className = 'month';
+                monthDiv.dataset.year = year;
+                monthDiv.dataset.month = month;
+
+                const monthNames = [
+                    'January', 'February', 'March', 'April', 'May', 'June',
+                    'July', 'August', 'September', 'October', 'November', 'December'
+                ];
+
+                monthDiv.innerHTML = `
+                    <div class="month-header">${monthNames[month]} ${year}</div>
+                    <div class="days-header">
+                        <div class="day-header">Mon</div>
+                        <div class="day-header">Tue</div>
+                        <div class="day-header">Wed</div>
+                        <div class="day-header">Thu</div>
+                        <div class="day-header">Fri</div>
+                        <div class="day-header">Sat</div>
+                        <div class="day-header">Sun</div>
+                    </div>
+                    <div class="days-grid" id="days-${monthKey}"></div>
+                `;
+
+                // Insert in correct order
+                const existingMonths = Array.from(this.container.children);
+                let inserted = false;
+                
+                for (let i = 0; i < existingMonths.length; i++) {
+                    const existingYear = parseInt(existingMonths[i].dataset.year);
+                    const existingMonth = parseInt(existingMonths[i].dataset.month);
+                    
+                    if (year > existingYear || (year === existingYear && month > existingMonth)) {
+                        this.container.insertBefore(monthDiv, existingMonths[i]);
+                        inserted = true;
+                        break;
+                    }
+                }
+                
+                if (!inserted) {
+                    this.container.appendChild(monthDiv);
+                }
+
+                this.renderDays(year, month);
+            }
+
+            renderDays(year, month) {
+                const monthKey = `${year}-${month}`;
+                const daysGrid = document.getElementById(`days-${monthKey}`);
+                
+                const firstDay = new Date(year, month, 1);
+                const lastDay = new Date(year, month + 1, 0);
+                const startDate = new Date(firstDay);
+                
+                // Adjust to Monday start
+                const dayOfWeek = (firstDay.getDay() + 6) % 7;
+                startDate.setDate(firstDay.getDate() - dayOfWeek);
+
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
+                for (let i = 0; i < 42; i++) {
+                    const currentDate = new Date(startDate);
+                    currentDate.setDate(startDate.getDate() + i);
+                    
+                    const dayDiv = document.createElement('div');
+                    dayDiv.className = 'day';
+                    dayDiv.textContent = currentDate.getDate();
+                    
+                    if (currentDate.getMonth() !== month) {
+                        dayDiv.classList.add('other-month');
+                    }
+                    
+                    if (currentDate.getTime() === today.getTime()) {
+                        dayDiv.classList.add('current-day');
+                    }
+                    
+                    const holidayName = this.isHoliday(currentDate);
+                    if (holidayName) {
+                        dayDiv.classList.add('holiday');
+                        dayDiv.title = holidayName;
+                        
+                        const indicator = document.createElement('div');
+                        indicator.className = 'holiday-indicator';
+                        dayDiv.appendChild(indicator);
+                    }
+                    
+                    daysGrid.appendChild(dayDiv);
+                }
+            }
+
+            setupScrollListener() {
+                const container = document.getElementById('calendar-container');
+                let scrollTimeout;
+
+                container.addEventListener('scroll', () => {
+                    clearTimeout(scrollTimeout);
+                    scrollTimeout = setTimeout(() => {
+                        this.handleScroll();
+                    }, 100);
+                });
+            }
+
+            handleScroll() {
+                const container = document.getElementById('calendar-container');
+                const scrollTop = container.scrollTop;
+                const scrollHeight = container.scrollHeight;
+                const clientHeight = container.clientHeight;
+
+                // Load more months when near the edges
+                if (scrollTop < 200) {
+                    // Near top - load previous months
+                    const firstMonth = this.container.firstElementChild;
+                    if (firstMonth) {
+                        const year = parseInt(firstMonth.dataset.year);
+                        const month = parseInt(firstMonth.dataset.month);
+                        this.renderMonth(year, month - 1);
+                        this.renderMonth(year, month - 2);
+                    }
+                }
+
+                if (scrollTop + clientHeight > scrollHeight - 200) {
+                    // Near bottom - load future months
+                    const lastMonth = this.container.lastElementChild;
+                    if (lastMonth) {
+                        const year = parseInt(lastMonth.dataset.year);
+                        const month = parseInt(lastMonth.dataset.month);
+                        this.renderMonth(year, month + 1);
+                        this.renderMonth(year, month + 2);
+                    }
+                }
+            }
+        }
+
+        // Initialize the calendar when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new CalendarApp();
+        });
     </script>
-  </body>
+</body>
 </html>
