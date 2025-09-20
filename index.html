@@ -166,6 +166,8 @@
                 this.currentDate = new Date();
                 this.loadedMonths = new Set();
                 this.holidays = {};
+                this.isLoading = false;
+                this.loadBuffer = 3; // Number of months to load at once
                 
                 this.initHolidays();
                 this.init();
@@ -266,9 +268,30 @@
             }
 
             init() {
-                // Load current month at top, previous month below
-                this.renderMonth(this.currentDate.getFullYear(), this.currentDate.getMonth());
-                this.renderMonth(this.currentDate.getFullYear(), this.currentDate.getMonth() - 1);
+                // Load current month and surrounding months for smooth scrolling
+                const currentYear = this.currentDate.getFullYear();
+                const currentMonth = this.currentDate.getMonth();
+                
+                // Load 6 months: 2 before current, current, 3 after current
+                for (let i = -2; i <= 3; i++) {
+                    this.renderMonth(currentYear, currentMonth + i);
+                }
+                
+                // Scroll to current month after a brief delay to ensure rendering
+                setTimeout(() => {
+                    this.scrollToCurrentMonth();
+                }, 100);
+            }
+
+            scrollToCurrentMonth() {
+                const currentYear = this.currentDate.getFullYear();
+                const currentMonth = this.currentDate.getMonth();
+                const currentMonthKey = `${currentYear}-${currentMonth}`;
+                const currentMonthElement = this.container.querySelector(`[data-year="${currentYear}"][data-month="${currentMonth}"]`);
+                
+                if (currentMonthElement) {
+                    currentMonthElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
             }
 
             renderMonth(year, month) {
@@ -380,43 +403,99 @@
             setupScrollListener() {
                 const container = document.getElementById('calendar-container');
                 let scrollTimeout;
+                let lastScrollTime = 0;
 
                 container.addEventListener('scroll', () => {
+                    const now = Date.now();
+                    
+                    // Throttle scroll events for better performance
+                    if (now - lastScrollTime > 50) {
+                        lastScrollTime = now;
+                        this.handleScroll();
+                    }
+                    
+                    // Also handle with debounced timeout for final position
                     clearTimeout(scrollTimeout);
                     scrollTimeout = setTimeout(() => {
                         this.handleScroll();
                     }, 100);
                 });
+
+                // Handle touch events for mobile
+                let touchStartY = 0;
+                container.addEventListener('touchstart', (e) => {
+                    touchStartY = e.touches[0].clientY;
+                });
+
+                container.addEventListener('touchmove', (e) => {
+                    const touchY = e.touches[0].clientY;
+                    const deltaY = touchStartY - touchY;
+                    
+                    // Pre-load content based on swipe direction
+                    if (Math.abs(deltaY) > 50) {
+                        this.handleScroll();
+                    }
+                });
             }
 
             handleScroll() {
+                if (this.isLoading) return;
+                
                 const container = document.getElementById('calendar-container');
                 const scrollTop = container.scrollTop;
                 const scrollHeight = container.scrollHeight;
                 const clientHeight = container.clientHeight;
 
-                // Load more months when near the edges
-                if (scrollTop < 200) {
+                // Load more months when approaching the edges
+                const loadThreshold = 400; // pixels from edge to trigger loading
+
+                if (scrollTop < loadThreshold) {
                     // Near top - load previous months
-                    const firstMonth = this.container.firstElementChild;
-                    if (firstMonth) {
-                        const year = parseInt(firstMonth.dataset.year);
-                        const month = parseInt(firstMonth.dataset.month);
-                        this.renderMonth(year, month - 1);
-                        this.renderMonth(year, month - 2);
-                    }
+                    this.loadPreviousMonths();
                 }
 
-                if (scrollTop + clientHeight > scrollHeight - 200) {
+                if (scrollTop + clientHeight > scrollHeight - loadThreshold) {
                     // Near bottom - load future months
-                    const lastMonth = this.container.lastElementChild;
-                    if (lastMonth) {
-                        const year = parseInt(lastMonth.dataset.year);
-                        const month = parseInt(lastMonth.dataset.month);
-                        this.renderMonth(year, month + 1);
-                        this.renderMonth(year, month + 2);
+                    this.loadNextMonths();
+                }
+            }
+
+            loadPreviousMonths() {
+                this.isLoading = true;
+                const firstMonth = this.container.firstElementChild;
+                
+                if (firstMonth) {
+                    const year = parseInt(firstMonth.dataset.year);
+                    const month = parseInt(firstMonth.dataset.month);
+                    
+                    // Load multiple months at once for smoother scrolling
+                    for (let i = 1; i <= this.loadBuffer; i++) {
+                        this.renderMonth(year, month - i);
                     }
                 }
+                
+                setTimeout(() => {
+                    this.isLoading = false;
+                }, 150);
+            }
+
+            loadNextMonths() {
+                this.isLoading = true;
+                const lastMonth = this.container.lastElementChild;
+                
+                if (lastMonth) {
+                    const year = parseInt(lastMonth.dataset.year);
+                    const month = parseInt(lastMonth.dataset.month);
+                    
+                    // Load multiple months at once for smoother scrolling
+                    for (let i = 1; i <= this.loadBuffer; i++) {
+                        this.renderMonth(year, month + i);
+                    }
+                }
+                
+                setTimeout(() => {
+                    this.isLoading = false;
+                }, 150);
             }
         }
 
