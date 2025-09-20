@@ -1,15 +1,21 @@
+/*
+ * Vanilla JS infinite-scroll calendar.
+ * - Scroll up to go forward one month at a time.
+ * - Scroll down to go backward one month at a time.
+ * - Both US and Netherlands holidays are highlighted by default.
+ */
+
 (function () {
   // Start at the current year and month
   let startYear = new Date().getFullYear();
   let startMonth = new Date().getMonth();
-  // Always show both US and Netherlands holidays
   const showUSHolidays = true;
   const showNLHolidays = true;
-  // Initially render two years’ worth of months
+  // Begin with a reasonable range of months; this will grow as you scroll
   let loadedMonths = 24;
   const root = document.getElementById('root');
 
-  // Calculate Easter Sunday (Gregorian)
+  // Compute Easter Sunday (Gregorian)
   function getEasterDate(year) {
     const a = year % 19;
     const b = Math.floor(year / 100);
@@ -28,7 +34,7 @@
     return new Date(year, month - 1, day);
   }
 
-  // nth weekday of month (n > 0 for nth, n < 0 for last)
+  // nth weekday utility (n>0 = nth, n<0 = last)
   function getNthWeekdayOfMonth(year, monthIndex, weekday, n) {
     if (n > 0) {
       const first = new Date(year, monthIndex, 1);
@@ -44,7 +50,7 @@
     }
   }
 
-  // US federal holidays
+  // US holidays
   function getUSHolidays(year) {
     const holidays = {};
     holidays[`1-1`] = "New Year’s Day";
@@ -85,7 +91,7 @@
     return holidays;
   }
 
-  // Build months and days with holidays
+  // Build an array of months starting at (startYear,startMonth)
   function generateMonths(year, monthIndex, count) {
     const months = [];
     for (let i = 0; i < count; i++) {
@@ -110,14 +116,12 @@
     return months;
   }
 
-  // Names for display
   const monthNames = [
     'January','February','March','April','May','June',
     'July','August','September','October','November','December'
   ];
   const weekdayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-  // Helper to create an element with optional class and text
   function createElement(tag, className, text) {
     const el = document.createElement(tag);
     if (className) el.className = className;
@@ -125,11 +129,9 @@
     return el;
   }
 
-  // Render the calendar with infinite scroll
   function render() {
     root.innerHTML = '';
 
-    // Full-height wrapper ensures the calendar scrolls correctly
     const wrapper = createElement('div', 'flex flex-col h-screen p-4 box-border');
     const container = createElement('div', 'overflow-y-auto flex-1');
     const grid = createElement('div', 'grid grid-cols-1 sm:grid-cols-2 gap-6');
@@ -138,13 +140,9 @@
     months.forEach(({ year, monthIndex, days }) => {
       const monthEl = createElement('div', 'border rounded bg-white shadow p-4 flex flex-col');
       monthEl.appendChild(createElement('div', 'text-center font-semibold mb-2', `${monthNames[monthIndex]} ${year}`));
-
-      // weekday headers
       const weekdaysRow = createElement('div', 'grid grid-cols-7 text-xs font-medium text-gray-500 mb-1');
       weekdayNames.forEach(wd => weekdaysRow.appendChild(createElement('div','text-center', wd)));
       monthEl.appendChild(weekdaysRow);
-
-      // days grid
       const daysGrid = createElement('div', 'grid grid-cols-7 gap-1 flex-1 text-center text-sm');
       const firstDayOfWeek = new Date(year, monthIndex, 1).getDay();
       for (let b = 0; b < firstDayOfWeek; b++) {
@@ -178,32 +176,37 @@
     wrapper.appendChild(container);
     root.appendChild(wrapper);
 
-    // Infinite scroll logic: load more months when nearing bottom/top
+    // Scroll handler: loads one month at a time
     container.onscroll = function () {
-      // near bottom: append future months
+      // Near bottom (after scroll inversion = scrolling up) -> load future month
       if (container.scrollTop + container.clientHeight > container.scrollHeight - 300) {
-        loadedMonths += 12;
+        loadedMonths += 1;
         container.onscroll = null;
         render();
       }
-      // near top: prepend past months
+      // Near top (after scroll inversion = scrolling down) -> load past month
       if (container.scrollTop < 300) {
-        const monthsToPrepend = 12;
-        let newMonth = startMonth - monthsToPrepend;
+        let newMonth = startMonth - 1;
         let newYear = startYear;
         if (newMonth < 0) {
-          newYear -= Math.ceil(Math.abs(newMonth) / 12);
-          newMonth = (newMonth % 12 + 12) % 12;
+          newYear -= 1;
+          newMonth = 11;
         }
         startYear = newYear;
         startMonth = newMonth;
-        loadedMonths += monthsToPrepend;
+        loadedMonths += 1;
         container.onscroll = null;
         const oldHeight = container.scrollHeight;
         render();
         const newHeight = container.scrollHeight;
         container.scrollTop += newHeight - oldHeight;
       }
+    };
+
+    // Invert wheel scrolling so up means forward and down means backward
+    container.onwheel = function (e) {
+      e.preventDefault();
+      container.scrollTop += -e.deltaY;
     };
   }
 
