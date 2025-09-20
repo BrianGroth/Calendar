@@ -2,8 +2,12 @@
   // Determine initial month/year
   let startYear = new Date().getFullYear();
   let startMonth = new Date().getMonth();
-  let showUSHolidays = false;
-  let showNLHolidays = false;
+  // Always show both US and Netherlands holidays
+  let showUSHolidays = true;
+  let showNLHolidays = true;
+
+  // Keep track of how many months are currently rendered for infinite scroll.
+  let loadedMonths = 24; // start with two years
 
   const root = document.getElementById('root');
 
@@ -118,72 +122,19 @@
     return el;
   }
 
-  // Render the calendar and controls into the root element
+  // Render the calendar into the root element.  This function
+  // recreates the entire grid based on the current starting month and
+  // the number of months loaded.  It does not render any controls
+  // because holidays are always shown and navigation is via scrolling.
   function render() {
     // Clear existing content
     root.innerHTML = '';
 
-    // Controls row
-    const controls = createElement('div', 'flex items-center space-x-4 mb-4');
-    // US holidays checkbox
-    const usLabel = createElement('label', 'inline-flex items-center');
-    const usCheckbox = createElement('input');
-    usCheckbox.type = 'checkbox';
-    usCheckbox.checked = showUSHolidays;
-    usCheckbox.className = 'form-checkbox rounded mr-2';
-    usCheckbox.addEventListener('change', () => {
-      showUSHolidays = usCheckbox.checked;
-      render();
-    });
-    const usSpan = createElement('span', null, 'Show US holidays');
-    usLabel.appendChild(usCheckbox);
-    usLabel.appendChild(usSpan);
-    // NL holidays checkbox
-    const nlLabel = createElement('label', 'inline-flex items-center');
-    const nlCheckbox = createElement('input');
-    nlCheckbox.type = 'checkbox';
-    nlCheckbox.checked = showNLHolidays;
-    nlCheckbox.className = 'form-checkbox rounded mr-2';
-    nlCheckbox.addEventListener('change', () => {
-      showNLHolidays = nlCheckbox.checked;
-      render();
-    });
-    const nlSpan = createElement('span', null, 'Show Netherlands holidays');
-    nlLabel.appendChild(nlCheckbox);
-    nlLabel.appendChild(nlSpan);
-    // Previous button
-    const prevBtn = createElement('button', 'ml-auto px-3 py-1 bg-gray-200 text-gray-800 rounded hover:bg-gray-300', 'Previous');
-    prevBtn.addEventListener('click', () => {
-      let newMonth = startMonth - 2;
-      let newYear = startYear;
-      if (newMonth < 0) {
-        newYear -= Math.ceil(Math.abs(newMonth) / 12);
-        newMonth = (newMonth % 12 + 12) % 12;
-      }
-      startYear = newYear;
-      startMonth = newMonth;
-      render();
-    });
-    // Next button
-    const nextBtn = createElement('button', 'px-3 py-1 bg-gray-200 text-gray-800 rounded hover:bg-gray-300', 'Next');
-    nextBtn.addEventListener('click', () => {
-      const newMonth = startMonth + 2;
-      startYear += Math.floor(newMonth / 12);
-      startMonth = newMonth % 12;
-      render();
-    });
-    // Append controls
-    controls.appendChild(usLabel);
-    controls.appendChild(nlLabel);
-    controls.appendChild(prevBtn);
-    controls.appendChild(nextBtn);
-    root.appendChild(controls);
-
-    // Calendar container
+    // Calendar container with overflow for scrolling
     const container = createElement('div', 'overflow-y-auto flex-1');
     const grid = createElement('div', 'grid grid-cols-1 sm:grid-cols-2 gap-6');
-    // Generate 24 months starting from current state
-    const months = generateMonths(startYear, startMonth, 24);
+    // Generate months starting from current state
+    const months = generateMonths(startYear, startMonth, loadedMonths);
     months.forEach(({ year, monthIndex, days }) => {
       const monthEl = createElement('div', 'border rounded bg-white shadow p-4 flex flex-col');
       // Month header
@@ -233,6 +184,34 @@
     });
     container.appendChild(grid);
     root.appendChild(container);
+
+    // Add infinite scroll: append more months when near bottom and prepend when near top
+    container.onscroll = function () {
+      // Append more months when within 300px of the bottom
+      if (container.scrollTop + container.clientHeight > container.scrollHeight - 300) {
+        loadedMonths += 12;
+        container.onscroll = null; // prevent multiple triggers
+        render();
+      }
+      // Prepend earlier months when within 300px of the top
+      if (container.scrollTop < 300 && startYear * 12 + startMonth > 0) {
+        const monthsToPrepend = 12;
+        let newMonth = startMonth - monthsToPrepend;
+        let newYear = startYear;
+        if (newMonth < 0) {
+          newYear -= Math.ceil(Math.abs(newMonth) / 12);
+          newMonth = (newMonth % 12 + 12) % 12;
+        }
+        startYear = newYear;
+        startMonth = newMonth;
+        loadedMonths += monthsToPrepend;
+        container.onscroll = null;
+        const oldHeight = container.scrollHeight;
+        render();
+        const newHeight = container.scrollHeight;
+        container.scrollTop += newHeight - oldHeight;
+      }
+    };
   }
 
   // Initial render
