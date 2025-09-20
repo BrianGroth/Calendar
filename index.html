@@ -408,8 +408,8 @@
                 container.addEventListener('scroll', () => {
                     const now = Date.now();
                     
-                    // Throttle scroll events for better performance
-                    if (now - lastScrollTime > 50) {
+                    // More frequent scroll handling for better infinite scrolling
+                    if (now - lastScrollTime > 30) {
                         lastScrollTime = now;
                         this.handleScroll();
                     }
@@ -418,23 +418,32 @@
                     clearTimeout(scrollTimeout);
                     scrollTimeout = setTimeout(() => {
                         this.handleScroll();
-                    }, 100);
+                    }, 50);
                 });
 
-                // Handle touch events for mobile
+                // Handle touch events for mobile with more aggressive loading
                 let touchStartY = 0;
+                let isScrolling = false;
+
                 container.addEventListener('touchstart', (e) => {
                     touchStartY = e.touches[0].clientY;
+                    isScrolling = false;
                 });
 
                 container.addEventListener('touchmove', (e) => {
                     const touchY = e.touches[0].clientY;
                     const deltaY = touchStartY - touchY;
                     
-                    // Pre-load content based on swipe direction
-                    if (Math.abs(deltaY) > 50) {
-                        this.handleScroll();
+                    if (!isScrolling && Math.abs(deltaY) > 20) {
+                        isScrolling = true;
+                        // Immediately trigger loading on touch scroll
+                        setTimeout(() => this.handleScroll(), 10);
                     }
+                });
+
+                container.addEventListener('touchend', () => {
+                    // Final check when touch ends
+                    setTimeout(() => this.handleScroll(), 100);
                 });
             }
 
