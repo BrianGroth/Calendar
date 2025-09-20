@@ -1,17 +1,15 @@
 (function () {
-  // Determine initial month/year
+  // Start at the current year and month
   let startYear = new Date().getFullYear();
   let startMonth = new Date().getMonth();
   // Always show both US and Netherlands holidays
-  let showUSHolidays = true;
-  let showNLHolidays = true;
-
-  // Keep track of how many months are currently rendered for infinite scroll.
-  let loadedMonths = 24; // start with two years
-
+  const showUSHolidays = true;
+  const showNLHolidays = true;
+  // Initially render two years’ worth of months
+  let loadedMonths = 24;
   const root = document.getElementById('root');
 
-  // Utility: compute Easter Sunday (Gregorian calendar)
+  // Calculate Easter Sunday (Gregorian)
   function getEasterDate(year) {
     const a = year % 19;
     const b = Math.floor(year / 100);
@@ -30,7 +28,7 @@
     return new Date(year, month - 1, day);
   }
 
-  // Utility: find nth weekday of a month (e.g., third Monday) or last if n<0
+  // nth weekday of month (n > 0 for nth, n < 0 for last)
   function getNthWeekdayOfMonth(year, monthIndex, weekday, n) {
     if (n > 0) {
       const first = new Date(year, monthIndex, 1);
@@ -46,27 +44,31 @@
     }
   }
 
-  // US federal holidays mapping
+  // US federal holidays
   function getUSHolidays(year) {
     const holidays = {};
-    holidays[`${1}-${1}`] = "New Year’s Day";
-    holidays[`${1}-${getNthWeekdayOfMonth(year, 0, 1, 3)}`] = "Martin Luther King Jr. Day";
-    holidays[`${2}-${getNthWeekdayOfMonth(year, 1, 1, 3)}`] = "Presidents’ Day";
-    holidays[`${5}-${getNthWeekdayOfMonth(year, 4, 1, -1)}`] = "Memorial Day";
-    holidays[`${6}-${19}`] = "Juneteenth";
-    holidays[`${7}-${4}`] = "Independence Day";
-    holidays[`${9}-${getNthWeekdayOfMonth(year, 8, 1, 1)}`] = "Labor Day";
-    holidays[`${10}-${getNthWeekdayOfMonth(year, 9, 1, 2)}`] = "Columbus Day";
-    holidays[`${11}-${11}`] = "Veterans Day";
-    holidays[`${11}-${getNthWeekdayOfMonth(year, 10, 4, 4)}`] = "Thanksgiving";
-    holidays[`${12}-${25}`] = "Christmas Day";
+    holidays[`1-1`] = "New Year’s Day";
+    holidays[`6-19`] = "Juneteenth";
+    holidays[`7-4`] = "Independence Day";
+    holidays[`11-11`] = "Veterans Day";
+    holidays[`12-25`] = "Christmas Day";
+    holidays[`1-${getNthWeekdayOfMonth(year, 0, 1, 3)}`] = "Martin Luther King Jr. Day";
+    holidays[`2-${getNthWeekdayOfMonth(year, 1, 1, 3)}`] = "Presidents’ Day";
+    holidays[`5-${getNthWeekdayOfMonth(year, 4, 1, -1)}`] = "Memorial Day";
+    holidays[`9-${getNthWeekdayOfMonth(year, 8, 1, 1)}`] = "Labor Day";
+    holidays[`10-${getNthWeekdayOfMonth(year, 9, 1, 2)}`] = "Columbus Day";
+    holidays[`11-${getNthWeekdayOfMonth(year, 10, 4, 4)}`] = "Thanksgiving";
     return holidays;
   }
 
-  // Netherlands public holidays mapping
+  // Netherlands holidays
   function getNLHolidays(year) {
     const holidays = {};
-    holidays[`${1}-${1}`] = "Nieuwjaarsdag";
+    holidays[`1-1`] = "Nieuwjaarsdag";
+    holidays[`4-27`] = "Koningsdag";
+    holidays[`5-5`] = "Bevrijdingsdag";
+    holidays[`12-25`] = "Eerste Kerstdag";
+    holidays[`12-26`] = "Tweede Kerstdag";
     const easter = getEasterDate(year);
     const goodFriday = new Date(easter);
     goodFriday.setDate(goodFriday.getDate() - 2);
@@ -80,26 +82,22 @@
     const whitMonday = new Date(easter);
     whitMonday.setDate(whitMonday.getDate() + 50);
     holidays[`${whitMonday.getMonth() + 1}-${whitMonday.getDate()}`] = "Tweede Pinksterdag";
-    holidays[`${4}-${27}`] = "Koningsdag";
-    holidays[`${5}-${5}`] = "Bevrijdingsdag";
-    holidays[`${12}-${25}`] = "Eerste Kerstdag";
-    holidays[`${12}-${26}`] = "Tweede Kerstdag";
     return holidays;
   }
 
-  // Generate month array from startYear/month and count
-  function generateMonths(startYear, startMonth, count) {
+  // Build months and days with holidays
+  function generateMonths(year, monthIndex, count) {
     const months = [];
     for (let i = 0; i < count; i++) {
-      const year = startYear + Math.floor((startMonth + i) / 12);
-      const monthIndex = (startMonth + i) % 12;
-      const totalDays = new Date(year, monthIndex + 1, 0).getDate();
+      const y = year + Math.floor((monthIndex + i) / 12);
+      const m = (monthIndex + i) % 12;
+      const daysInMonth = new Date(y, m + 1, 0).getDate();
+      const usHolidays = showUSHolidays ? getUSHolidays(y) : {};
+      const nlHolidays = showNLHolidays ? getNLHolidays(y) : {};
       const days = [];
-      const usHolidays = showUSHolidays ? getUSHolidays(year) : {};
-      const nlHolidays = showNLHolidays ? getNLHolidays(year) : {};
-      for (let d = 1; d <= totalDays; d++) {
-        const date = new Date(year, monthIndex, d);
-        const key = `${monthIndex + 1}-${d}`;
+      for (let d = 1; d <= daysInMonth; d++) {
+        const date = new Date(y, m, d);
+        const key = `${m + 1}-${d}`;
         let holidayName = null;
         if (showUSHolidays && usHolidays[key]) holidayName = usHolidays[key];
         if (showNLHolidays && nlHolidays[key]) {
@@ -107,14 +105,19 @@
         }
         days.push({ date, holidayName });
       }
-      months.push({ year, monthIndex, days });
+      months.push({ year: y, monthIndex: m, days });
     }
     return months;
   }
 
-  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  // Names for display
+  const monthNames = [
+    'January','February','March','April','May','June',
+    'July','August','September','October','November','December'
+  ];
   const weekdayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
+  // Helper to create an element with optional class and text
   function createElement(tag, className, text) {
     const el = document.createElement(tag);
     if (className) el.className = className;
@@ -122,35 +125,28 @@
     return el;
   }
 
-  // Render the calendar into the root element.  This function
-  // recreates the entire grid based on the current starting month and
-  // the number of months loaded.  It does not render any controls
-  // because holidays are always shown and navigation is via scrolling.
+  // Render the calendar with infinite scroll
   function render() {
-    // Clear existing content
     root.innerHTML = '';
 
-    // Calendar container with overflow for scrolling
+    // Full-height wrapper ensures the calendar scrolls correctly
+    const wrapper = createElement('div', 'flex flex-col h-screen p-4 box-border');
     const container = createElement('div', 'overflow-y-auto flex-1');
     const grid = createElement('div', 'grid grid-cols-1 sm:grid-cols-2 gap-6');
-    // Generate months starting from current state
+
     const months = generateMonths(startYear, startMonth, loadedMonths);
     months.forEach(({ year, monthIndex, days }) => {
       const monthEl = createElement('div', 'border rounded bg-white shadow p-4 flex flex-col');
-      // Month header
-      const header = createElement('div', 'text-center font-semibold mb-2', `${monthNames[monthIndex]} ${year}`);
-      monthEl.appendChild(header);
-      // Weekday row
+      monthEl.appendChild(createElement('div', 'text-center font-semibold mb-2', `${monthNames[monthIndex]} ${year}`));
+
+      // weekday headers
       const weekdaysRow = createElement('div', 'grid grid-cols-7 text-xs font-medium text-gray-500 mb-1');
-      weekdayNames.forEach((wd) => {
-        const wdEl = createElement('div', 'text-center', wd);
-        weekdaysRow.appendChild(wdEl);
-      });
+      weekdayNames.forEach(wd => weekdaysRow.appendChild(createElement('div','text-center', wd)));
       monthEl.appendChild(weekdaysRow);
-      // Days grid
+
+      // days grid
       const daysGrid = createElement('div', 'grid grid-cols-7 gap-1 flex-1 text-center text-sm');
       const firstDayOfWeek = new Date(year, monthIndex, 1).getDay();
-      // blanks for leading empty cells
       for (let b = 0; b < firstDayOfWeek; b++) {
         daysGrid.appendChild(createElement('div'));
       }
@@ -159,21 +155,16 @@
         const isToday = date.toDateString() === new Date().toDateString();
         const isHoliday = !!holidayName;
         let bgClass = '';
-        if (isHoliday && showUSHolidays && showNLHolidays) {
-          bgClass = 'bg-green-200';
-        } else if (isHoliday && showUSHolidays) {
-          bgClass = 'bg-red-200';
-        } else if (isHoliday && showNLHolidays) {
-          bgClass = 'bg-blue-200';
-        }
+        if (isHoliday && showUSHolidays && showNLHolidays) bgClass = 'bg-green-200';
+        else if (isHoliday && showUSHolidays) bgClass = 'bg-red-200';
+        else if (isHoliday && showNLHolidays) bgClass = 'bg-blue-200';
         const dayEl = createElement('div', `relative p-2 rounded ${bgClass}`);
-        if (isToday) {
-          dayEl.className += ' ring-2 ring-blue-500';
-        }
-        const span = createElement('span', null, String(day));
-        dayEl.appendChild(span);
+        if (isToday) dayEl.className += ' ring-2 ring-blue-500';
+        dayEl.appendChild(createElement('span', null, String(day)));
         if (isHoliday) {
-          const tooltip = createElement('span', 'absolute -top-1 left-1/2 transform -translate-x-1/2 bg-yellow-100 text-xs px-1 py-px rounded shadow');
+          const tooltip = createElement('span',
+            'absolute -top-1 left-1/2 transform -translate-x-1/2 bg-yellow-100 text-xs px-1 py-px rounded shadow'
+          );
           tooltip.textContent = holidayName;
           dayEl.appendChild(tooltip);
         }
@@ -182,19 +173,20 @@
       monthEl.appendChild(daysGrid);
       grid.appendChild(monthEl);
     });
-    container.appendChild(grid);
-    root.appendChild(container);
 
-    // Add infinite scroll: append more months when near bottom and prepend when near top
+    container.appendChild(grid);
+    wrapper.appendChild(container);
+    root.appendChild(wrapper);
+
+    // Infinite scroll logic: load more months when nearing bottom/top
     container.onscroll = function () {
-      // Append more months when within 300px of the bottom
+      // near bottom: append future months
       if (container.scrollTop + container.clientHeight > container.scrollHeight - 300) {
         loadedMonths += 12;
         container.onscroll = null;
         render();
       }
-      // Prepend earlier months when within 300px of the top.
-      // Removing any lower bound on the starting month allows infinite scrolling backwards.
+      // near top: prepend past months
       if (container.scrollTop < 300) {
         const monthsToPrepend = 12;
         let newMonth = startMonth - monthsToPrepend;
