@@ -182,11 +182,12 @@
         class CalendarApp {
             constructor() {
                 this.container = document.getElementById('calendar-content');
-                this.currentDate = new Date();
+                // Force current date to September 2025 (based on user's context)
+                this.currentDate = new Date(2025, 8, 20); // Month is 0-indexed, so 8 = September
                 this.loadedMonths = new Set();
                 this.holidays = {};
                 this.isLoading = false;
-                this.loadBuffer = 3; // Number of months to load at once
+                this.scrollingToMonth = false; // Prevent auto-scroll conflicts
                 
                 this.initHolidays();
                 this.init();
@@ -291,25 +292,55 @@
                 const currentYear = this.currentDate.getFullYear();
                 const currentMonth = this.currentDate.getMonth();
                 
-                // Load many more months initially for unlimited scrolling
-                for (let i = -6; i <= 12; i++) { // 6 before, current, 12 after = 19 months total
+                console.log(`Initializing calendar for ${currentYear}-${currentMonth + 1} (${this.getMonthName(currentMonth)} ${currentYear})`);
+                
+                // Load many months: 6 before current, current, and 24 after to reach well into 2028
+                for (let i = -6; i <= 24; i++) { // This will load through 2027
                     this.renderMonth(currentYear, currentMonth + i);
                 }
                 
                 // Scroll to current month after rendering
                 setTimeout(() => {
                     this.scrollToCurrentMonth();
-                }, 300);
+                }, 500);
+            }
+
+            getMonthName(month) {
+                const monthNames = [
+                    'January', 'February', 'March', 'April', 'May', 'June',
+                    'July', 'August', 'September', 'October', 'November', 'December'
+                ];
+                return monthNames[month];
             }
 
             scrollToCurrentMonth() {
+                if (this.scrollingToMonth) return;
+                this.scrollingToMonth = true;
+                
                 const currentYear = this.currentDate.getFullYear();
                 const currentMonth = this.currentDate.getMonth();
-                const currentMonthKey = `${currentYear}-${currentMonth}`;
                 const currentMonthElement = this.container.querySelector(`[data-year="${currentYear}"][data-month="${currentMonth}"]`);
                 
+                console.log(`Scrolling to current month: ${this.getMonthName(currentMonth)} ${currentYear}`);
+                
                 if (currentMonthElement) {
-                    currentMonthElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    const container = document.getElementById('calendar-container');
+                    const elementTop = currentMonthElement.offsetTop;
+                    const containerHeight = container.clientHeight;
+                    const scrollPosition = elementTop - (containerHeight / 4); // Position near top of screen
+                    
+                    container.scrollTo({
+                        top: Math.max(0, scrollPosition),
+                        behavior: 'smooth'
+                    });
+                    
+                    // Reset scrolling flag after animation completes
+                    setTimeout(() => {
+                        this.scrollingToMonth = false;
+                    }, 1000);
+                } else {
+                    console.error('Current month element not found!');
+                    this.scrollingToMonth = false;
                 }
             }
 
@@ -467,7 +498,7 @@
             }
 
             handleScroll() {
-                if (this.isLoading) return;
+                if (this.isLoading || this.scrollingToMonth) return;
                 
                 const container = document.getElementById('calendar-container');
                 const scrollTop = container.scrollTop;
@@ -475,35 +506,37 @@
                 const clientHeight = container.clientHeight;
 
                 // More aggressive loading threshold for unlimited scrolling
-                const loadThreshold = 1000; // Increased threshold even more
+                const loadThreshold = 1200; // Increased threshold even more
                 
                 // Check if we're near the top
                 if (scrollTop < loadThreshold) {
                     this.loadPreviousMonths();
                 }
 
-                // Check if we're near the bottom - this is the key fix
+                // Check if we're near the bottom - load more future months
                 if (scrollTop + clientHeight > scrollHeight - loadThreshold) {
                     this.loadNextMonths();
                 }
 
                 // Additional safety checks for unlimited scrolling
                 const loadedCount = this.container.children.length;
-                const scrollProgress = scrollTop / (scrollHeight - clientHeight);
+                const scrollProgress = scrollTop / Math.max(1, scrollHeight - clientHeight);
                 
-                // If we're more than 80% down and have limited months, load more
-                if (scrollProgress > 0.8 && loadedCount < 20) {
+                // If we're more than 70% down and have limited months, load more
+                if (scrollProgress > 0.7) {
                     this.loadNextMonths();
                 }
                 
-                // If we're less than 20% down and have limited months, load more previous
-                if (scrollProgress < 0.2 && loadedCount < 20) {
+                // If we're less than 30% down and have limited months, load more previous
+                if (scrollProgress < 0.3) {
                     this.loadPreviousMonths();
                 }
             }
 
             loadPreviousMonths() {
+                if (this.isLoading || this.scrollingToMonth) return;
                 this.isLoading = true;
+                
                 const container = document.getElementById('calendar-container');
                 const scrollTop = container.scrollTop;
                 
@@ -514,7 +547,7 @@
                     const month = parseInt(firstMonth.dataset.month);
                     
                     // Load multiple months at once for smoother scrolling
-                    const monthsToLoad = 5; // Load more months for better infinite experience
+                    const monthsToLoad = 6; // Load previous months
                     for (let i = 1; i <= monthsToLoad; i++) {
                         this.renderMonth(year, month - i);
                     }
@@ -522,35 +555,39 @@
                     // Maintain scroll position after adding content at top
                     setTimeout(() => {
                         const newScrollTop = container.scrollHeight - (container.scrollHeight - scrollTop - (monthsToLoad * 550)); // Approximate month height
-                        container.scrollTop = newScrollTop;
+                        container.scrollTop = Math.max(0, newScrollTop);
                     }, 10);
                 }
                 
                 setTimeout(() => {
                     this.isLoading = false;
-                }, 100);
+                }, 50);
             }
 
             loadNextMonths() {
+                if (this.isLoading || this.scrollingToMonth) return;
                 this.isLoading = true;
+                
                 const lastMonth = this.container.lastElementChild;
                 
                 if (lastMonth) {
                     const year = parseInt(lastMonth.dataset.year);
                     const month = parseInt(lastMonth.dataset.month);
                     
-                    // Load even more months at once for truly unlimited scrolling
-                    const monthsToLoad = 8; // Increased to load more future months
+                    // Load many more months at once to ensure we reach 2028+
+                    const monthsToLoad = 12; // Load a full year at a time
                     for (let i = 1; i <= monthsToLoad; i++) {
                         this.renderMonth(year, month + i);
                     }
                     
-                    console.log(`Loaded future months through ${year + Math.floor((month + monthsToLoad) / 12)}`);
+                    const finalYear = year + Math.floor((month + monthsToLoad) / 12);
+                    const finalMonth = (month + monthsToLoad) % 12;
+                    console.log(`Loaded future months through ${this.getMonthName(finalMonth)} ${finalYear}`);
                 }
                 
                 setTimeout(() => {
                     this.isLoading = false;
-                }, 50); // Faster loading
+                }, 50);
             }
         }
 
