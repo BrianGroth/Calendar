@@ -1,600 +1,180 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calendar App</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mobile Calendar</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background: #fff;
+      color: #333;
+      overflow-y: scroll;
+      -webkit-overflow-scrolling: touch;
+    }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            background-attachment: fixed;
-            overflow: hidden;
-            height: 100vh;
-            width: 100vw;
-            margin: 0;
-            padding: 0;
-            position: fixed;
-            top: 0;
-            left: 0;
-        }
+    .month {
+      padding: 1rem;
+      border-bottom: 1px solid #ccc;
+    }
 
-        .calendar-container {
-            height: 100vh;
-            width: 100vw;
-            overflow-y: auto;
-            overflow-x: hidden;
-            scroll-behavior: smooth;
-            position: fixed;
-            top: 0;
-            left: 0;
-            -webkit-overflow-scrolling: touch;
-        }
+    .month-name {
+      font-size: 1.5rem;
+      font-weight: bold;
+      margin-bottom: 0.5rem;
+    }
 
-        .month {
-            width: 100%;
-            max-width: 400px;
-            margin: 0 auto 20px auto;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            padding: 20px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            position: relative;
-        }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 0.25rem;
+    }
 
-        #calendar-content {
-            padding: 20px 10px;
-            min-height: 100vh;
-            width: 100%;
-            box-sizing: border-box;
-        }
+    .day-name {
+      font-weight: bold;
+      text-align: center;
+      padding: 0.25rem;
+      background: #f0f0f0;
+    }
 
-        .month-header {
-            text-align: center;
-            font-size: 1.8em;
-            font-weight: 600;
-            margin-bottom: 20px;
-            color: #4a5568;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
+    .day {
+      text-align: center;
+      padding: 0.5rem;
+      border-radius: 4px;
+    }
 
-        .days-header {
-            display: grid;
-            grid-template-columns: repeat(7, 1fr);
-            gap: 1px;
-            margin-bottom: 10px;
-        }
-
-        .day-header {
-            text-align: center;
-            font-weight: 600;
-            color: #718096;
-            padding: 10px 0;
-            font-size: 0.9em;
-        }
-
-        .days-grid {
-            display: grid;
-            grid-template-columns: repeat(7, 1fr);
-            gap: 1px;
-        }
-
-        .day {
-            aspect-ratio: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 8px;
-            font-size: 0.9em;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            position: relative;
-            background: rgba(255, 255, 255, 0.5);
-        }
-
-        .day:hover {
-            background: rgba(103, 126, 234, 0.2);
-            transform: scale(1.05);
-        }
-
-        .day.other-month {
-            color: #cbd5e0;
-            background: rgba(255, 255, 255, 0.2);
-        }
-
-        .day.current-day {
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            color: white;
-            font-weight: 700;
-            box-shadow: 0 4px 12px rgba(103, 126, 234, 0.3);
-        }
-
-        .day.holiday {
-            background: linear-gradient(45deg, #f093fb, #f5576c);
-            color: white;
-            font-weight: 600;
-        }
-
-        .day.holiday.other-month {
-            background: rgba(240, 147, 251, 0.3);
-            color: #cbd5e0;
-        }
-
-        .holiday-indicator {
-            position: absolute;
-            bottom: 2px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 4px;
-            height: 4px;
-            background: #f5576c;
-            border-radius: 50%;
-        }
-
-        .day.holiday .holiday-indicator {
-            background: white;
-        }
-
-        .loading {
-            text-align: center;
-            padding: 20px;
-            color: white;
-            font-size: 1.1em;
-        }
-
-        @media (max-width: 480px) {
-            .month {
-                margin: 0 10px 20px 10px;
-                padding: 15px;
-            }
-            
-            .month-header {
-                font-size: 1.5em;
-                margin-bottom: 15px;
-            }
-            
-            .day {
-                font-size: 0.8em;
-            }
-            
-            .day-header {
-                font-size: 0.8em;
-                padding: 8px 0;
-            }
-        }
-    </style>
+    .holiday {
+      background-color: #ffeeba;
+    }
+  </style>
 </head>
 <body>
-    <div class="calendar-container" id="calendar-container">
-        <div id="calendar-content"></div>
-    </div>
+  <div id="calendar"></div>
 
-    <script>
-        class CalendarApp {
-            constructor() {
-                this.container = document.getElementById('calendar-content');
-                // Force current date to September 2025 (based on user's context)
-                this.currentDate = new Date(2025, 8, 20); // Month is 0-indexed, so 8 = September
-                this.loadedMonths = new Set();
-                this.holidays = {};
-                this.isLoading = false;
-                this.scrollingToMonth = false; // Prevent auto-scroll conflicts
-                
-                this.initHolidays();
-                this.init();
-                this.setupScrollListener();
-            }
+  <script>
+    const calendarEl = document.getElementById("calendar");
 
-            initHolidays() {
-                // US Federal Holidays (fixed dates and calculated)
-                this.holidays.US = {
-                    "01-01": "New Year's Day",
-                    "07-04": "Independence Day",
-                    "11-11": "Veterans Day",
-                    "12-25": "Christmas Day"
-                };
+    const holidays = {
+      "US": {
+        "2025-07-04": "Independence Day",
+        "2025-11-27": "Thanksgiving",
+        "2025-12-25": "Christmas Day",
+        // Add more US holidays through 2030
+      },
+      "NL": {
+        "2025-04-27": "King's Day",
+        "2025-05-05": "Liberation Day",
+        "2025-12-25": "Christmas Day",
+        // Add more NL holidays through 2030
+      }
+    };
 
-                // Netherlands Holidays
-                this.holidays.NL = {
-                    "01-01": "New Year's Day",
-                    "04-27": "King's Day",
-                    "05-05": "Liberation Day",
-                    "12-25": "Christmas Day",
-                    "12-26": "Boxing Day"
-                };
-            }
+    const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-            getEasterDate(year) {
-                const a = year % 19;
-                const b = Math.floor(year / 100);
-                const c = year % 100;
-                const d = Math.floor(b / 4);
-                const e = b % 4;
-                const f = Math.floor((b + 8) / 25);
-                const g = Math.floor((b - f + 1) / 3);
-                const h = (19 * a + b - d - g + 15) % 30;
-                const i = Math.floor(c / 4);
-                const k = c % 4;
-                const l = (32 + 2 * e + 2 * i - h - k) % 7;
-                const m = Math.floor((a + 11 * h + 22 * l) / 451);
-                const month = Math.floor((h + l - 7 * m + 114) / 31);
-                const day = ((h + l - 7 * m + 114) % 31) + 1;
-                return new Date(year, month - 1, day);
-            }
+    function isHoliday(dateStr) {
+      return holidays.US[dateStr] || holidays.NL[dateStr];
+    }
 
-            getMovingHolidays(year) {
-                const holidays = {};
-                
-                // Easter-based holidays
-                const easter = this.getEasterDate(year);
-                const goodFriday = new Date(easter.getTime() - 2 * 24 * 60 * 60 * 1000);
-                const easterMonday = new Date(easter.getTime() + 1 * 24 * 60 * 60 * 1000);
-                const ascension = new Date(easter.getTime() + 39 * 24 * 60 * 60 * 1000);
-                const whitsun = new Date(easter.getTime() + 49 * 24 * 60 * 60 * 1000);
-                const whitMonday = new Date(easter.getTime() + 50 * 24 * 60 * 60 * 1000);
+    function generateMonth(year, month) {
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      const monthName = firstDay.toLocaleString("default", { month: "long" });
+      const monthEl = document.createElement("div");
+      monthEl.className = "month";
 
-                holidays[this.formatDate(goodFriday)] = "Good Friday";
-                holidays[this.formatDate(easter)] = "Easter";
-                holidays[this.formatDate(easterMonday)] = "Easter Monday";
-                holidays[this.formatDate(ascension)] = "Ascension Day";
-                holidays[this.formatDate(whitsun)] = "Whit Sunday";
-                holidays[this.formatDate(whitMonday)] = "Whit Monday";
+      const title = document.createElement("div");
+      title.className = "month-name";
+      title.textContent = `${monthName} ${year}`;
+      monthEl.appendChild(title);
 
-                // US Labor Day (first Monday in September)
-                const laborDay = new Date(year, 8, 1);
-                while (laborDay.getDay() !== 1) {
-                    laborDay.setDate(laborDay.getDate() + 1);
-                }
-                holidays[this.formatDate(laborDay)] = "Labor Day (US)";
+      const grid = document.createElement("div");
+      grid.className = "grid";
 
-                // US Thanksgiving (fourth Thursday in November)
-                const thanksgiving = new Date(year, 10, 1);
-                while (thanksgiving.getDay() !== 4) {
-                    thanksgiving.setDate(thanksgiving.getDate() + 1);
-                }
-                thanksgiving.setDate(thanksgiving.getDate() + 21);
-                holidays[this.formatDate(thanksgiving)] = "Thanksgiving";
+      // Day names
+      dayNames.forEach(day => {
+        const dayEl = document.createElement("div");
+        dayEl.className = "day-name";
+        dayEl.textContent = day;
+        grid.appendChild(dayEl);
+      });
 
-                // Martin Luther King Jr. Day (third Monday in January)
-                const mlkDay = new Date(year, 0, 1);
-                while (mlkDay.getDay() !== 1) {
-                    mlkDay.setDate(mlkDay.getDate() + 1);
-                }
-                mlkDay.setDate(mlkDay.getDate() + 14);
-                holidays[this.formatDate(mlkDay)] = "MLK Jr. Day";
+      // Empty slots before first day
+      let startDay = firstDay.getDay(); // Sunday = 0
+      startDay = (startDay + 6) % 7; // Convert to Monday = 0
+      for (let i = 0; i < startDay; i++) {
+        grid.appendChild(document.createElement("div"));
+      }
 
-                return holidays;
-            }
-
-            formatDate(date) {
-                return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-            }
-
-            isHoliday(date) {
-                const dateStr = this.formatDate(date);
-                const year = date.getFullYear();
-                const movingHolidays = this.getMovingHolidays(year);
-                
-                return this.holidays.US[dateStr] || this.holidays.NL[dateStr] || movingHolidays[dateStr];
-            }
-
-            init() {
-                // Load current month and surrounding months for smooth scrolling
-                const currentYear = this.currentDate.getFullYear();
-                const currentMonth = this.currentDate.getMonth();
-                
-                console.log(`Initializing calendar for ${currentYear}-${currentMonth + 1} (${this.getMonthName(currentMonth)} ${currentYear})`);
-                
-                // Load many months: 6 before current, current, and 24 after to reach well into 2028
-                for (let i = -6; i <= 24; i++) { // This will load through 2027
-                    this.renderMonth(currentYear, currentMonth + i);
-                }
-                
-                // Scroll to current month after rendering
-                setTimeout(() => {
-                    this.scrollToCurrentMonth();
-                }, 500);
-            }
-
-            getMonthName(month) {
-                const monthNames = [
-                    'January', 'February', 'March', 'April', 'May', 'June',
-                    'July', 'August', 'September', 'October', 'November', 'December'
-                ];
-                return monthNames[month];
-            }
-
-            scrollToCurrentMonth() {
-                if (this.scrollingToMonth) return;
-                this.scrollingToMonth = true;
-                
-                const currentYear = this.currentDate.getFullYear();
-                const currentMonth = this.currentDate.getMonth();
-                const currentMonthElement = this.container.querySelector(`[data-year="${currentYear}"][data-month="${currentMonth}"]`);
-                
-                console.log(`Scrolling to current month: ${this.getMonthName(currentMonth)} ${currentYear}`);
-                
-                if (currentMonthElement) {
-                    const container = document.getElementById('calendar-container');
-                    const elementTop = currentMonthElement.offsetTop;
-                    const containerHeight = container.clientHeight;
-                    const scrollPosition = elementTop - (containerHeight / 4); // Position near top of screen
-                    
-                    container.scrollTo({
-                        top: Math.max(0, scrollPosition),
-                        behavior: 'smooth'
-                    });
-                    
-                    // Reset scrolling flag after animation completes
-                    setTimeout(() => {
-                        this.scrollingToMonth = false;
-                    }, 1000);
-                } else {
-                    console.error('Current month element not found!');
-                    this.scrollingToMonth = false;
-                }
-            }
-
-            renderMonth(year, month) {
-                // Handle year boundary
-                if (month < 0) {
-                    month = 11;
-                    year--;
-                } else if (month > 11) {
-                    month = 0;
-                    year++;
-                }
-
-                const monthKey = `${year}-${month}`;
-                if (this.loadedMonths.has(monthKey)) return;
-
-                this.loadedMonths.add(monthKey);
-
-                const monthDiv = document.createElement('div');
-                monthDiv.className = 'month';
-                monthDiv.dataset.year = year;
-                monthDiv.dataset.month = month;
-
-                const monthNames = [
-                    'January', 'February', 'March', 'April', 'May', 'June',
-                    'July', 'August', 'September', 'October', 'November', 'December'
-                ];
-
-                monthDiv.innerHTML = `
-                    <div class="month-header">${monthNames[month]} ${year}</div>
-                    <div class="days-header">
-                        <div class="day-header">Mon</div>
-                        <div class="day-header">Tue</div>
-                        <div class="day-header">Wed</div>
-                        <div class="day-header">Thu</div>
-                        <div class="day-header">Fri</div>
-                        <div class="day-header">Sat</div>
-                        <div class="day-header">Sun</div>
-                    </div>
-                    <div class="days-grid" id="days-${monthKey}"></div>
-                `;
-
-                // Insert in correct order
-                const existingMonths = Array.from(this.container.children);
-                let inserted = false;
-                
-                for (let i = 0; i < existingMonths.length; i++) {
-                    const existingYear = parseInt(existingMonths[i].dataset.year);
-                    const existingMonth = parseInt(existingMonths[i].dataset.month);
-                    
-                    if (year > existingYear || (year === existingYear && month > existingMonth)) {
-                        this.container.insertBefore(monthDiv, existingMonths[i]);
-                        inserted = true;
-                        break;
-                    }
-                }
-                
-                if (!inserted) {
-                    this.container.appendChild(monthDiv);
-                }
-
-                this.renderDays(year, month);
-            }
-
-            renderDays(year, month) {
-                const monthKey = `${year}-${month}`;
-                const daysGrid = document.getElementById(`days-${monthKey}`);
-                
-                const firstDay = new Date(year, month, 1);
-                const lastDay = new Date(year, month + 1, 0);
-                const startDate = new Date(firstDay);
-                
-                // Adjust to Monday start
-                const dayOfWeek = (firstDay.getDay() + 6) % 7;
-                startDate.setDate(firstDay.getDate() - dayOfWeek);
-
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-
-                for (let i = 0; i < 42; i++) {
-                    const currentDate = new Date(startDate);
-                    currentDate.setDate(startDate.getDate() + i);
-                    
-                    const dayDiv = document.createElement('div');
-                    dayDiv.className = 'day';
-                    dayDiv.textContent = currentDate.getDate();
-                    
-                    if (currentDate.getMonth() !== month) {
-                        dayDiv.classList.add('other-month');
-                    }
-                    
-                    if (currentDate.getTime() === today.getTime()) {
-                        dayDiv.classList.add('current-day');
-                    }
-                    
-                    const holidayName = this.isHoliday(currentDate);
-                    if (holidayName) {
-                        dayDiv.classList.add('holiday');
-                        dayDiv.title = holidayName;
-                        
-                        const indicator = document.createElement('div');
-                        indicator.className = 'holiday-indicator';
-                        dayDiv.appendChild(indicator);
-                    }
-                    
-                    daysGrid.appendChild(dayDiv);
-                }
-            }
-
-            setupScrollListener() {
-                const container = document.getElementById('calendar-container');
-                let scrollTimeout;
-                let lastScrollTime = 0;
-
-                container.addEventListener('scroll', () => {
-                    const now = Date.now();
-                    
-                    // More frequent scroll handling for better infinite scrolling
-                    if (now - lastScrollTime > 30) {
-                        lastScrollTime = now;
-                        this.handleScroll();
-                    }
-                    
-                    // Also handle with debounced timeout for final position
-                    clearTimeout(scrollTimeout);
-                    scrollTimeout = setTimeout(() => {
-                        this.handleScroll();
-                    }, 50);
-                });
-
-                // Handle touch events for mobile with more aggressive loading
-                let touchStartY = 0;
-                let isScrolling = false;
-
-                container.addEventListener('touchstart', (e) => {
-                    touchStartY = e.touches[0].clientY;
-                    isScrolling = false;
-                });
-
-                container.addEventListener('touchmove', (e) => {
-                    const touchY = e.touches[0].clientY;
-                    const deltaY = touchStartY - touchY;
-                    
-                    if (!isScrolling && Math.abs(deltaY) > 20) {
-                        isScrolling = true;
-                        // Immediately trigger loading on touch scroll
-                        setTimeout(() => this.handleScroll(), 10);
-                    }
-                });
-
-                container.addEventListener('touchend', () => {
-                    // Final check when touch ends
-                    setTimeout(() => this.handleScroll(), 100);
-                });
-            }
-
-            handleScroll() {
-                if (this.isLoading || this.scrollingToMonth) return;
-                
-                const container = document.getElementById('calendar-container');
-                const scrollTop = container.scrollTop;
-                const scrollHeight = container.scrollHeight;
-                const clientHeight = container.clientHeight;
-
-                // More aggressive loading threshold for unlimited scrolling
-                const loadThreshold = 1200; // Increased threshold even more
-                
-                // Check if we're near the top
-                if (scrollTop < loadThreshold) {
-                    this.loadPreviousMonths();
-                }
-
-                // Check if we're near the bottom - load more future months
-                if (scrollTop + clientHeight > scrollHeight - loadThreshold) {
-                    this.loadNextMonths();
-                }
-
-                // Additional safety checks for unlimited scrolling
-                const loadedCount = this.container.children.length;
-                const scrollProgress = scrollTop / Math.max(1, scrollHeight - clientHeight);
-                
-                // If we're more than 70% down and have limited months, load more
-                if (scrollProgress > 0.7) {
-                    this.loadNextMonths();
-                }
-                
-                // If we're less than 30% down and have limited months, load more previous
-                if (scrollProgress < 0.3) {
-                    this.loadPreviousMonths();
-                }
-            }
-
-            loadPreviousMonths() {
-                if (this.isLoading || this.scrollingToMonth) return;
-                this.isLoading = true;
-                
-                const container = document.getElementById('calendar-container');
-                const scrollTop = container.scrollTop;
-                
-                const firstMonth = this.container.firstElementChild;
-                
-                if (firstMonth) {
-                    const year = parseInt(firstMonth.dataset.year);
-                    const month = parseInt(firstMonth.dataset.month);
-                    
-                    // Load multiple months at once for smoother scrolling
-                    const monthsToLoad = 6; // Load previous months
-                    for (let i = 1; i <= monthsToLoad; i++) {
-                        this.renderMonth(year, month - i);
-                    }
-                    
-                    // Maintain scroll position after adding content at top
-                    setTimeout(() => {
-                        const newScrollTop = container.scrollHeight - (container.scrollHeight - scrollTop - (monthsToLoad * 550)); // Approximate month height
-                        container.scrollTop = Math.max(0, newScrollTop);
-                    }, 10);
-                }
-                
-                setTimeout(() => {
-                    this.isLoading = false;
-                }, 50);
-            }
-
-            loadNextMonths() {
-                if (this.isLoading || this.scrollingToMonth) return;
-                this.isLoading = true;
-                
-                const lastMonth = this.container.lastElementChild;
-                
-                if (lastMonth) {
-                    const year = parseInt(lastMonth.dataset.year);
-                    const month = parseInt(lastMonth.dataset.month);
-                    
-                    // Load many more months at once to ensure we reach 2028+
-                    const monthsToLoad = 12; // Load a full year at a time
-                    for (let i = 1; i <= monthsToLoad; i++) {
-                        this.renderMonth(year, month + i);
-                    }
-                    
-                    const finalYear = year + Math.floor((month + monthsToLoad) / 12);
-                    const finalMonth = (month + monthsToLoad) % 12;
-                    console.log(`Loaded future months through ${this.getMonthName(finalMonth)} ${finalYear}`);
-                }
-                
-                setTimeout(() => {
-                    this.isLoading = false;
-                }, 50);
-            }
+      // Days
+      for (let d = 1; d <= lastDay.getDate(); d++) {
+        const date = new Date(year, month, d);
+        const dateStr = date.toISOString().split("T")[0];
+        const dayEl = document.createElement("div");
+        dayEl.className = "day";
+        if (isHoliday(dateStr)) {
+          dayEl.classList.add("holiday");
         }
+        dayEl.textContent = d;
+        grid.appendChild(dayEl);
+      }
 
-        // Initialize the calendar when the page loads
-        document.addEventListener('DOMContentLoaded', () => {
-            new CalendarApp();
-        });
-    </script>
+      monthEl.appendChild(grid);
+      return monthEl;
+    }
+
+    let currentYear = new Date().getFullYear();
+    let currentMonth = new Date().getMonth();
+
+    function renderInitialMonths() {
+      calendarEl.appendChild(generateMonth(currentYear, currentMonth));
+      let prevMonth = currentMonth - 1;
+      let prevYear = currentYear;
+      if (prevMonth < 0) {
+        prevMonth = 11;
+        prevYear--;
+      }
+      calendarEl.appendChild(generateMonth(prevYear, prevMonth));
+    }
+
+    let renderedMonths = new Set();
+
+    function renderMonth(year, month) {
+      const key = `${year}-${month}`;
+      if (renderedMonths.has(key)) return;
+      renderedMonths.add(key);
+      const monthEl = generateMonth(year, month);
+      calendarEl.appendChild(monthEl);
+    }
+
+    function handleScroll() {
+      const scrollY = window.scrollY;
+      const viewportHeight = window.innerHeight;
+      const totalHeight = document.body.scrollHeight;
+
+      if (scrollY + viewportHeight > totalHeight - 100) {
+        // Scroll up: future months
+        currentMonth++;
+        if (currentMonth > 11) {
+          currentMonth = 0;
+          currentYear++;
+        }
+        renderMonth(currentYear, currentMonth);
+      }
+
+      if (scrollY < 100) {
+        // Scroll down: past months
+        currentMonth--;
+        if (currentMonth < 0) {
+          currentMonth = 11;
+          currentYear--;
+        }
+        renderMonth(currentYear, currentMonth);
+      }
+    }
+
+    renderInitialMonths();
+    window.addEventListener("scroll", handleScroll);
+  </script>
 </body>
 </html>
