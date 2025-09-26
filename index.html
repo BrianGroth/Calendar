@@ -1,102 +1,219 @@
 <!DOCTYPE html>
 <html lang="en">
-<!-- Keep existing head section unchanged -->
 <head>
-  <!-- ... existing head content ... -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendar</title>
+    <style>
+        .month {
+            margin: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+        }
+        .month-header {
+            text-align: center;
+            font-size: 1.5em;
+            margin-bottom: 10px;
+        }
+        .weekday-header {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            text-align: center;
+            font-weight: bold;
+        }
+        .days {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            text-align: center;
+        }
+        .day {
+            padding: 5px;
+            border: 1px solid #eee;
+        }
+        .other-month {
+            color: #ccc;
+        }
+    </style>
 </head>
 <body>
-  <div id="calendar"></div>
+    <div id="calendar"></div>
 
-  <script>
-    // Keep existing constants and helper functions unchanged until renderInitial()
-
-    // Modify the renderInitial function to pre-load more months
-    function renderInitial() {
-      // Pre-render several months ahead
-      for (let i = 0; i < 6; i++) { // Pre-load 6 months
-        let monthToRender = currentMonth + i;
-        let yearToRender = currentYear;
+    <script>
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         
-        while (monthToRender > 11) {
-          monthToRender -= 12;
-          yearToRender++;
-        }
+        const now = new Date();
+        let currentMonth = now.getMonth();
+        let currentYear = now.getFullYear();
         
-        if (yearToRender <= maxYear) {
-          renderMonth(yearToRender, monthToRender, "end");
-        }
-      }
+        const minYear = currentYear - 1;
+        const maxYear = currentYear + 1;
+        const minMonth = 0;
+        const maxMonth = 11;
 
-      // Also render one month in the past
-      let prevMonth = currentMonth - 1;
-      let prevYear = currentYear;
-      if (prevMonth < 0) {
-        prevMonth = 11;
-        prevYear--;
-      }
-      if (prevYear >= minYear) {
-        renderMonth(prevYear, prevMonth, "start");
-      }
-    }
-
-    // Modify the scroll handler to be more proactive
-    function handleScroll() {
-      const scrollY = window.scrollY;
-      const viewportHeight = window.innerHeight;
-      const totalHeight = document.body.scrollHeight;
-
-      // Load future months when user is approaching the top
-      if (scrollY < viewportHeight) { // Increased threshold
-        let nextMonth = currentMonth + 1;
-        let nextYear = currentYear;
-        if (nextMonth > 11) {
-          nextMonth = 0;
-          nextYear++;
+        function getDaysInMonth(year, month) {
+            return new Date(year, month + 1, 0).getDate();
         }
 
-        if (nextYear < maxYear || (nextYear === maxYear && nextMonth <= maxMonth)) {
-          currentMonth = nextMonth;
-          currentYear = nextYear;
-          requestAnimationFrame(() => {
-            const oldHeight = document.body.scrollHeight;
-            renderMonth(currentYear, currentMonth, "start");
-            const heightDiff = document.body.scrollHeight - oldHeight;
-            window.scrollBy(0, heightDiff); // Smoother scroll adjustment
-          });
-        }
-      }
-
-      // Load past months when approaching bottom
-      if (scrollY + viewportHeight > totalHeight - viewportHeight) {
-        let prevMonth = currentMonth - 1;
-        let prevYear = currentYear;
-        if (prevMonth < 0) {
-          prevMonth = 11;
-          prevYear--;
+        function getFirstDayOfMonth(year, month) {
+            return new Date(year, month, 1).getDay();
         }
 
-        if (prevYear > minYear || (prevYear === minYear && prevMonth >= minMonth)) {
-          currentMonth = prevMonth;
-          currentYear = prevYear;
-          renderMonth(currentYear, currentMonth, "end");
-        }
-      }
-    }
+        function createMonthElement(year, month) {
+            const monthElement = document.createElement('div');
+            monthElement.className = 'month';
+            monthElement.setAttribute('data-year', year);
+            monthElement.setAttribute('data-month', month);
 
-    // Add throttling to prevent too frequent scroll handling
-    function throttle(func, limit) {
-      let inThrottle;
-      return function(...args) {
-        if (!inThrottle) {
-          func.apply(this, args);
-          inThrottle = true;
-          setTimeout(() => inThrottle = false, limit);
-        }
-      }
-    }
+            const header = document.createElement('div');
+            header.className = 'month-header';
+            header.textContent = `${months[month]} ${year}`;
+            monthElement.appendChild(header);
 
-    renderInitial();
-    window.addEventListener("scroll", throttle(handleScroll, 150));
-  </script>
+            const weekdayHeader = document.createElement('div');
+            weekdayHeader.className = 'weekday-header';
+            weekdays.forEach(weekday => {
+                const dayElement = document.createElement('div');
+                dayElement.textContent = weekday;
+                weekdayHeader.appendChild(dayElement);
+            });
+            monthElement.appendChild(weekdayHeader);
+
+            const daysGrid = document.createElement('div');
+            daysGrid.className = 'days';
+
+            const firstDay = getFirstDayOfMonth(year, month);
+            const daysInMonth = getDaysInMonth(year, month);
+            const prevMonth = month - 1 < 0 ? 11 : month - 1;
+            const prevYear = month - 1 < 0 ? year - 1 : year;
+            const daysInPrevMonth = getDaysInMonth(prevYear, prevMonth);
+
+            // Previous month's days
+            for (let i = firstDay - 1; i >= 0; i--) {
+                const dayElement = document.createElement('div');
+                dayElement.className = 'day other-month';
+                dayElement.textContent = daysInPrevMonth - i;
+                daysGrid.appendChild(dayElement);
+            }
+
+            // Current month's days
+            for (let i = 1; i <= daysInMonth; i++) {
+                const dayElement = document.createElement('div');
+                dayElement.className = 'day';
+                dayElement.textContent = i;
+                daysGrid.appendChild(dayElement);
+            }
+
+            // Next month's days
+            const totalCells = Math.ceil((firstDay + daysInMonth) / 7) * 7;
+            const nextMonthDays = totalCells - (firstDay + daysInMonth);
+            for (let i = 1; i <= nextMonthDays; i++) {
+                const dayElement = document.createElement('div');
+                dayElement.className = 'day other-month';
+                dayElement.textContent = i;
+                daysGrid.appendChild(dayElement);
+            }
+
+            monthElement.appendChild(daysGrid);
+            return monthElement;
+        }
+
+        function renderMonth(year, month, position = "end") {
+            const calendar = document.getElementById('calendar');
+            const monthElement = createMonthElement(year, month);
+            
+            if (position === "start") {
+                calendar.insertBefore(monthElement, calendar.firstChild);
+            } else {
+                calendar.appendChild(monthElement);
+            }
+        }
+
+        function renderInitial() {
+            // Pre-render several months ahead
+            for (let i = 0; i < 6; i++) {
+                let monthToRender = currentMonth + i;
+                let yearToRender = currentYear;
+                
+                while (monthToRender > 11) {
+                    monthToRender -= 12;
+                    yearToRender++;
+                }
+                
+                if (yearToRender <= maxYear) {
+                    renderMonth(yearToRender, monthToRender, "end");
+                }
+            }
+
+            // Also render one month in the past
+            let prevMonth = currentMonth - 1;
+            let prevYear = currentYear;
+            if (prevMonth < 0) {
+                prevMonth = 11;
+                prevYear--;
+            }
+            if (prevYear >= minYear) {
+                renderMonth(prevYear, prevMonth, "start");
+            }
+        }
+
+        function handleScroll() {
+            const scrollY = window.scrollY;
+            const viewportHeight = window.innerHeight;
+            const totalHeight = document.body.scrollHeight;
+
+            // Load future months when user is approaching the bottom
+            if (scrollY + viewportHeight > totalHeight - viewportHeight) {
+                let nextMonth = currentMonth + 1;
+                let nextYear = currentYear;
+                if (nextMonth > 11) {
+                    nextMonth = 0;
+                    nextYear++;
+                }
+
+                if (nextYear < maxYear || (nextYear === maxYear && nextMonth <= maxMonth)) {
+                    currentMonth = nextMonth;
+                    currentYear = nextYear;
+                    renderMonth(currentYear, currentMonth, "end");
+                }
+            }
+
+            // Load past months when approaching top
+            if (scrollY < viewportHeight) {
+                let prevMonth = currentMonth - 1;
+                let prevYear = currentYear;
+                if (prevMonth < 0) {
+                    prevMonth = 11;
+                    prevYear--;
+                }
+
+                if (prevYear > minYear || (prevYear === minYear && prevMonth >= minMonth)) {
+                    currentMonth = prevMonth;
+                    currentYear = prevYear;
+                    requestAnimationFrame(() => {
+                        const oldHeight = document.body.scrollHeight;
+                        renderMonth(currentYear, currentMonth, "start");
+                        const heightDiff = document.body.scrollHeight - oldHeight;
+                        window.scrollBy(0, heightDiff);
+                    });
+                }
+            }
+        }
+
+        function throttle(func, limit) {
+            let inThrottle;
+            return function(...args) {
+                if (!inThrottle) {
+                    func.apply(this, args);
+                    inThrottle = true;
+                    setTimeout(() => inThrottle = false, limit);
+                }
+            }
+        }
+
+        // Initialize the calendar
+        renderInitial();
+        window.addEventListener("scroll", throttle(handleScroll, 150));
+    </script>
 </body>
 </html>
