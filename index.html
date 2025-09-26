@@ -123,28 +123,40 @@
       return monthEl;
     }
 
-    let currentYear = new Date().getFullYear();
-    let currentMonth = new Date().getMonth();
+    const today = new Date();
+    let currentYear = today.getFullYear();
+    let currentMonth = today.getMonth();
 
-    function renderInitialMonths() {
-      calendarEl.appendChild(generateMonth(currentYear, currentMonth));
+    const minYear = currentYear - 1;
+    const minMonth = currentMonth;
+    const maxYear = 2030;
+    const maxMonth = 11;
+
+    const rendered = new Set();
+
+    function renderMonth(year, month, position = "end") {
+      const key = `${year}-${month}`;
+      if (rendered.has(key)) return;
+      rendered.add(key);
+
+      const monthEl = generateMonth(year, month);
+      if (position === "start") {
+        calendarEl.insertBefore(monthEl, calendarEl.firstChild);
+      } else {
+        calendarEl.appendChild(monthEl);
+      }
+    }
+
+    function renderInitial() {
+      renderMonth(currentYear, currentMonth, "start");
+
       let prevMonth = currentMonth - 1;
       let prevYear = currentYear;
       if (prevMonth < 0) {
         prevMonth = 11;
         prevYear--;
       }
-      calendarEl.appendChild(generateMonth(prevYear, prevMonth));
-    }
-
-    let renderedMonths = new Set();
-
-    function renderMonth(year, month) {
-      const key = `${year}-${month}`;
-      if (renderedMonths.has(key)) return;
-      renderedMonths.add(key);
-      const monthEl = generateMonth(year, month);
-      calendarEl.appendChild(monthEl);
+      renderMonth(prevYear, prevMonth, "end");
     }
 
     function handleScroll() {
@@ -152,28 +164,47 @@
       const viewportHeight = window.innerHeight;
       const totalHeight = document.body.scrollHeight;
 
-      if (scrollY + viewportHeight > totalHeight - 100) {
-        // Scroll up: future months
-        currentMonth++;
-        if (currentMonth > 11) {
-          currentMonth = 0;
-          currentYear++;
+      // Scroll up: future months
+      if (scrollY < 100) {
+        let nextMonth = currentMonth + 1;
+        let nextYear = currentYear;
+        if (nextMonth > 11) {
+          nextMonth = 0;
+          nextYear++;
         }
-        renderMonth(currentYear, currentMonth);
+
+        if (
+          nextYear < maxYear ||
+          (nextYear === maxYear && nextMonth <= maxMonth)
+        ) {
+          currentMonth = nextMonth;
+          currentYear = nextYear;
+          renderMonth(currentYear, currentMonth, "start");
+          window.scrollBy(0, 300); // keep scroll position stable
+        }
       }
 
-      if (scrollY < 100) {
-        // Scroll down: past months
-        currentMonth--;
-        if (currentMonth < 0) {
-          currentMonth = 11;
-          currentYear--;
+      // Scroll down: past months
+      if (scrollY + viewportHeight > totalHeight - 100) {
+        let prevMonth = currentMonth - 1;
+        let prevYear = currentYear;
+        if (prevMonth < 0) {
+          prevMonth = 11;
+          prevYear--;
         }
-        renderMonth(currentYear, currentMonth);
+
+        if (
+          prevYear > minYear ||
+          (prevYear === minYear && prevMonth >= minMonth)
+        ) {
+          currentMonth = prevMonth;
+          currentYear = prevYear;
+          renderMonth(currentYear, currentMonth, "end");
+        }
       }
     }
 
-    renderInitialMonths();
+    renderInitial();
     window.addEventListener("scroll", handleScroll);
   </script>
 </body>
