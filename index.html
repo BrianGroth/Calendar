@@ -1,171 +1,52 @@
 <!DOCTYPE html>
 <html lang="en">
+<!-- Keep existing head section unchanged -->
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Mobile Calendar</title>
-  <style>
-    body {
-      margin: 0;
-      font-family: sans-serif;
-      background: #fff;
-      color: #333;
-      overflow-y: scroll;
-      -webkit-overflow-scrolling: touch;
-    }
-
-    .month {
-      padding: 1rem;
-      border-bottom: 1px solid #ccc;
-    }
-
-    .month-name {
-      font-size: 1.5rem;
-      font-weight: bold;
-      margin-bottom: 0.5rem;
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(7, 1fr);
-      gap: 0.25rem;
-    }
-
-    .day-name {
-      font-weight: bold;
-      text-align: center;
-      padding: 0.25rem;
-      background: #f0f0f0;
-    }
-
-    .day {
-      text-align: center;
-      padding: 0.5rem;
-      border-radius: 4px;
-    }
-
-    .holiday {
-      background-color: #ffeeba;
-    }
-  </style>
+  <!-- ... existing head content ... -->
 </head>
 <body>
   <div id="calendar"></div>
 
   <script>
-    const calendarEl = document.getElementById("calendar");
+    // Keep existing constants and helper functions unchanged until renderInitial()
 
-    const holidays = {
-      "US": {
-        "2025-07-04": "Independence Day",
-        "2025-11-27": "Thanksgiving",
-        "2025-12-25": "Christmas Day",
-        // Add more US holidays through 2030
-      },
-      "NL": {
-        "2025-04-27": "King's Day",
-        "2025-05-05": "Liberation Day",
-        "2025-12-25": "Christmas Day",
-        // Add more NL holidays through 2030
-      }
-    };
-
-    const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-    function isHoliday(dateStr) {
-      return holidays.US[dateStr] || holidays.NL[dateStr];
-    }
-
-    function generateMonth(year, month) {
-      const firstDay = new Date(year, month, 1);
-      const lastDay = new Date(year, month + 1, 0);
-      const monthName = firstDay.toLocaleString("default", { month: "long" });
-      const monthEl = document.createElement("div");
-      monthEl.className = "month";
-
-      const title = document.createElement("div");
-      title.className = "month-name";
-      title.textContent = `${monthName} ${year}`;
-      monthEl.appendChild(title);
-
-      const grid = document.createElement("div");
-      grid.className = "grid";
-
-      // Day names
-      dayNames.forEach(day => {
-        const dayEl = document.createElement("div");
-        dayEl.className = "day-name";
-        dayEl.textContent = day;
-        grid.appendChild(dayEl);
-      });
-
-      // Empty slots before first day
-      let startDay = firstDay.getDay(); // Sunday = 0
-      startDay = (startDay + 6) % 7; // Convert to Monday = 0
-      for (let i = 0; i < startDay; i++) {
-        grid.appendChild(document.createElement("div"));
-      }
-
-      // Days
-      for (let d = 1; d <= lastDay.getDate(); d++) {
-        const date = new Date(year, month, d);
-        const dateStr = date.toISOString().split("T")[0];
-        const dayEl = document.createElement("div");
-        dayEl.className = "day";
-        if (isHoliday(dateStr)) {
-          dayEl.classList.add("holiday");
-        }
-        dayEl.textContent = d;
-        grid.appendChild(dayEl);
-      }
-
-      monthEl.appendChild(grid);
-      return monthEl;
-    }
-
-    const today = new Date();
-    let currentYear = today.getFullYear();
-    let currentMonth = today.getMonth();
-
-    const minYear = currentYear - 1;
-    const minMonth = currentMonth;
-    const maxYear = 2030;
-    const maxMonth = 11;
-
-    const rendered = new Set();
-
-    function renderMonth(year, month, position = "end") {
-      const key = `${year}-${month}`;
-      if (rendered.has(key)) return;
-      rendered.add(key);
-
-      const monthEl = generateMonth(year, month);
-      if (position === "start") {
-        calendarEl.insertBefore(monthEl, calendarEl.firstChild);
-      } else {
-        calendarEl.appendChild(monthEl);
-      }
-    }
-
+    // Modify the renderInitial function to pre-load more months
     function renderInitial() {
-      renderMonth(currentYear, currentMonth, "start");
+      // Pre-render several months ahead
+      for (let i = 0; i < 6; i++) { // Pre-load 6 months
+        let monthToRender = currentMonth + i;
+        let yearToRender = currentYear;
+        
+        while (monthToRender > 11) {
+          monthToRender -= 12;
+          yearToRender++;
+        }
+        
+        if (yearToRender <= maxYear) {
+          renderMonth(yearToRender, monthToRender, "end");
+        }
+      }
 
+      // Also render one month in the past
       let prevMonth = currentMonth - 1;
       let prevYear = currentYear;
       if (prevMonth < 0) {
         prevMonth = 11;
         prevYear--;
       }
-      renderMonth(prevYear, prevMonth, "end");
+      if (prevYear >= minYear) {
+        renderMonth(prevYear, prevMonth, "start");
+      }
     }
 
+    // Modify the scroll handler to be more proactive
     function handleScroll() {
       const scrollY = window.scrollY;
       const viewportHeight = window.innerHeight;
       const totalHeight = document.body.scrollHeight;
 
-      // Scroll up: future months
-      if (scrollY < 100) {
+      // Load future months when user is approaching the top
+      if (scrollY < viewportHeight) { // Increased threshold
         let nextMonth = currentMonth + 1;
         let nextYear = currentYear;
         if (nextMonth > 11) {
@@ -173,19 +54,20 @@
           nextYear++;
         }
 
-        if (
-          nextYear < maxYear ||
-          (nextYear === maxYear && nextMonth <= maxMonth)
-        ) {
+        if (nextYear < maxYear || (nextYear === maxYear && nextMonth <= maxMonth)) {
           currentMonth = nextMonth;
           currentYear = nextYear;
-          renderMonth(currentYear, currentMonth, "start");
-          window.scrollBy(0, 300); // keep scroll position stable
+          requestAnimationFrame(() => {
+            const oldHeight = document.body.scrollHeight;
+            renderMonth(currentYear, currentMonth, "start");
+            const heightDiff = document.body.scrollHeight - oldHeight;
+            window.scrollBy(0, heightDiff); // Smoother scroll adjustment
+          });
         }
       }
 
-      // Scroll down: past months
-      if (scrollY + viewportHeight > totalHeight - 100) {
+      // Load past months when approaching bottom
+      if (scrollY + viewportHeight > totalHeight - viewportHeight) {
         let prevMonth = currentMonth - 1;
         let prevYear = currentYear;
         if (prevMonth < 0) {
@@ -193,10 +75,7 @@
           prevYear--;
         }
 
-        if (
-          prevYear > minYear ||
-          (prevYear === minYear && prevMonth >= minMonth)
-        ) {
+        if (prevYear > minYear || (prevYear === minYear && prevMonth >= minMonth)) {
           currentMonth = prevMonth;
           currentYear = prevYear;
           renderMonth(currentYear, currentMonth, "end");
@@ -204,8 +83,20 @@
       }
     }
 
+    // Add throttling to prevent too frequent scroll handling
+    function throttle(func, limit) {
+      let inThrottle;
+      return function(...args) {
+        if (!inThrottle) {
+          func.apply(this, args);
+          inThrottle = true;
+          setTimeout(() => inThrottle = false, limit);
+        }
+      }
+    }
+
     renderInitial();
-    window.addEventListener("scroll", handleScroll);
+    window.addEventListener("scroll", throttle(handleScroll, 150));
   </script>
 </body>
 </html>
