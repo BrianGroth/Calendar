@@ -17,7 +17,7 @@
   <main class="settings">
     <section class="card">
       <h2>GitHub Repository</h2>
-      <p class="hint">Your Personal Access Token (PAT) stays in <strong>localStorage</strong> and is never committed.</p>
+      <p class="hint">Your Personal Access Token (PAT) can be used to commit settings and save events. It is stored locally unless you put it in settings.json (not recommended).</p>
       <div class="grid">
         <label>
           Owner (username)
@@ -35,7 +35,7 @@
     </section>
 
     <section class="card" style="margin-top:1rem;">
-      <h2>Calendars</h2>
+      <h2>Calendars & Integrations</h2>
       <div class="grid">
         <label>
           TripIt iCal URL
@@ -87,15 +87,17 @@
         </label>
       </div>
       <div class="actions">
-        <button id="saveBtn" type="button">Save</button>
+        <button id="saveBtn" type="button">Save (Local)</button>
+        <button id="saveSharedBtn" type="button">Save Shared (commit to repo)</button>
         <button id="clearBtn" type="button">Clear Local Settings</button>
       </div>
-      <p class="hint">Settings are saved locally in your browser only.</p>
+      <p class="hint">Local saves go to your browser. "Save Shared" writes <code>config/settings.json</code> in the repo.</p>
     </section>
   </main>
 
   <div id="status" aria-live="polite" class="status"></div>
 
+  <script src="lib/github.js"></script>
   <script>
     (function(){
       const KEY = 'calendar.settings.v1';
@@ -105,12 +107,9 @@
         tripitIcalUrl: '', holidays: { usUrl:'', ukUrl:'', nlUrl:'' }
       };
 
-      function load(){
-        try{ const j = localStorage.getItem(KEY); return j ? JSON.parse(j) : { ...defaults }; }
-        catch(e){ return { ...defaults }; }
-      }
+      function load(){ try{ const j=localStorage.getItem(KEY); return j? JSON.parse(j) : { ...defaults }; } catch{ return { ...defaults }; } }
       function save(s){ localStorage.setItem(KEY, JSON.stringify(s)); }
-      function status(msg){ const el = document.getElementById('status'); if (el) el.textContent = msg; }
+      function status(msg){ const el=document.getElementById('status'); if(el) el.textContent=msg; }
 
       const s = load();
       const $ = (id) => document.getElementById(id);
@@ -128,6 +127,7 @@
       $('#timeFormat').value = s.timeFormat24h ? '24' : '12';
       $('#timezone').value = s.timezone || 'Europe/Amsterdam';
 
+      // Local save
       $('#saveBtn').addEventListener('click', () => {
         const next = {
           owner: $('#owner').value.trim(),
@@ -148,11 +148,58 @@
         status('Settings saved locally.');
       });
 
+      // Clear local
       $('#clearBtn').addEventListener('click', () => {
         localStorage.removeItem(KEY);
         status('Local settings cleared. Page will now reload.');
         setTimeout(() => window.location.reload(), 600);
       });
+
+      // --- Save Shared (commit config/settings.json) ---
+      async function buildSharedJsonFromForm(){
+        return {
+          preferences: {
+            theme: document.getElementById('theme').value,
+            weekStart: Number(document.getElementById('weekStart').value || 1),
+            timeFormat24h: document.getElementById('timeFormat').value === '24',
+            timezone: document.getElementById('timezone').value
+          },
+          holidays: {
+            usUrl: document.getElementById('hol_us').value.trim(),
+            ukUrl: document.getElementById('hol_uk').value.trim(),
+            nlUrl: document.getElementById('hol_nl').value.trim()
+          },
+          repo: {
+            owner: document.getElementById('owner').value.trim(),
+            name:  (document.getElementById('repo').value.trim() || 'Calendar')
+          },
+          integrations: {
+            tripitIcalUrl: document.getElementById('tripit').value.trim()
+          }
+        };
+      }
+
+      async function saveShared(){
+        const owner = (document.getElementById('owner').value || '').trim();
+        const repo  = (document.getElementById('repo').value  || 'Calendar').trim();
+        const token = (document.getElementById('token').value || '').trim();
+        if (!owner || !repo || !token){ status('Owner, Repo and PAT are required to commit shared settings.'); return; }
+
+        const path = 'config/settings.json';
+        let sha = null;
+        try { const got = await window.GitHubAPI.getFile(owner, repo, path, token); sha = got?.sha || null; } catch {}
+
+        const content = JSON.stringify(await buildSharedJsonFromForm(), null, 2);
+        try {
+          await window.GitHubAPI.putFile(owner, repo, path, content, sha, token, 'chore(settings): update shared settings');
+          status('Shared settings saved to repo at config/settings.json.');
+        } catch (e) {
+          status('Failed to save shared settings. Check token permissions.');
+        }
+      }
+
+      const sharedBtn = document.getElementById('saveSharedBtn');
+      if (sharedBtn) sharedBtn.addEventListener('click', saveShared);
     })();
   </script>
 </body>
