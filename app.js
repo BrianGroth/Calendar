@@ -1,21 +1,41 @@
 /*
-  Calendar App — app.js (v4)
-  - Adds a "Trips" toggle button per month to overlay TripIt events
-  - Fixes future scrolling off-by-one so you can scroll 24 months ahead
+  Calendar App — app.js (v5)
+  - Loads shared config from config/settings.json (non-secrets) and merges with local settings
+  - Keeps TripIt URL and GitHub PAT local-only for safety (but see notes below)
+  - Includes 2-year future scroll + fixed weekday headers + Trips toggle
 */
 
 ;(() => {
   const TZ = 'Europe/Amsterdam';
   const STATUS_EL = () => document.getElementById('status');
 
+  // ---------------------------
+  // Settings
+  // ---------------------------
   const SETTINGS_KEY = 'calendar.settings.v1';
   const defaultSettings = {
     owner: '', repo: 'Calendar', token: '',
     timeFormat24h: true, weekStart: 1, timezone: TZ, theme: 'light',
     tripitIcalUrl: '', holidays: { usUrl: '', ukUrl: '', nlUrl: '' }
   };
-  function loadSettings(){ try{ const j=localStorage.getItem(SETTINGS_KEY); if(!j) return { ...defaultSettings }; const p=JSON.parse(j); return { ...defaultSettings, ...p, holidays:{...defaultSettings.holidays, ...(p.holidays||{})} }; }catch{ return { ...defaultSettings }; } }
 
+  function loadLocalSettings(){
+    try { const j = localStorage.getItem(SETTINGS_KEY); return j ? JSON.parse(j) : { ...defaultSettings }; }
+    catch { return { ...defaultSettings }; }
+  }
+  function saveLocalSettings(s){ localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); }
+
+  async function loadSharedSettings(){
+    try {
+      const res = await fetch('config/settings.json', { cache: 'no-store' });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch { return null; }
+  }
+
+  // ---------------------------
+  // Utils
+  // ---------------------------
   const pad=(n)=> n.toString().padStart(2,'0');
   const fmtMonthKey=(d)=> `${d.getFullYear()}-${pad(d.getMonth()+1)}`;
   const monthStart=(d)=> new Date(Date.UTC(d.getFullYear(), d.getMonth(), 1));
@@ -28,24 +48,57 @@
   const consoleWarn=(m,e)=> console.warn(m, e? String(e).replace(/ghp_[A-Za-z0-9]+/g,'***'): '');
   const uuid=()=> 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=crypto.getRandomValues(new Uint8Array(1))[0]&15; const v=c==='x'?r:(r&0x3|0x8); return v.toString(16);});
 
+  // ---------------------------
+  // GitHub
+  // ---------------------------
   const GH={
     async loadMonth(settings, y, m){ const path=`data/${y}-${pad(m)}.json`; try{ const res=await window.GitHubAPI.getFile(settings.owner, settings.repo, path, settings.token||undefined); if(!res) return {events:[], sha:null}; const arr=JSON.parse(res.content||'[]'); return {events:Array.isArray(arr)?arr:[], sha:res.sha||null}; }catch(e){ consoleWarn('loadMonth', e); return {events:[], sha:null}; } },
     async saveMonth(settings, y, m, events, sha){ const path=`data/${y}-${pad(m)}.json`; const body=JSON.stringify(events, null, 2); const msg=`feat(events): update ${y}-${pad(m)} (${events.length} record${events.length===1?'':'s'})`; return window.GitHubAPI.putFile(settings.owner, settings.repo, path, body, sha||undefined, settings.token, msg); }
   };
 
+  // ---------------------------
+  // Overlays (TripIt + Holidays)
+  // ---------------------------
   const OverlayCache=new Map();
-  async function fetchICS(url){ const r=await fetch(url, {cache:'no-store'}); if(!r.ok) throw new Error('ICS fetch '+r.status); return window.ICS.parseICS(await r.text()); }
+  async function fetchICS(url){ const r=await fetch(url,{cache:'no-store'}); if(!r.ok) throw new Error('ICS fetch '+r.status); const txt=await r.text(); return window.ICS.parseICS(txt); }
   function filterEventsToMonth(evts, monthDate){ const s=monthStart(monthDate), e=monthEnd(monthDate); return evts.filter(x=>{ const d=x.start instanceof Date? x.start : new Date(x.start); return d>=s && d<=e; }).map(x=>({ id:x.id||uuid(), title:x.summary||x.title||'Untitled', date:toISODateLocal(new Date(x.start)), startTime:x.start instanceof Date? formatTimeHHMM(x.start):'', endTime:x.end instanceof Date? formatTimeHHMM(x.end):'', notes:x.description||'', url:x.url||'', __overlay:true })); }
   async function getOverlay(key, url, monthDate){ if(!url) return []; const k=`${key}|${fmtMonthKey(monthDate)}`; if(OverlayCache.has(k)) return OverlayCache.get(k); try{ const raw=await fetchICS(url); const m=filterEventsToMonth(raw, monthDate); OverlayCache.set(k,m); return m; }catch(e){ consoleWarn('overlay '+key, e); return []; } }
 
+  // ---------------------------
+  // Calendar
+  // ---------------------------
   class CalendarApp{
     constructor(rootId='monthsContainer'){
-      this.settings=loadSettings();
+      this.settings = loadLocalSettings();
       this.root=document.getElementById(rootId); if(!this.root) throw new Error('#monthsContainer missing');
       this.root.classList.add('calendar-scroll');
       this.loadedKeys=new Set(); this.monthNodes=[]; this.current=new Date();
       this.maxFuture=addMonths(this.current, 24);
-      this.observeSentinels(); this.renderInitial(); this.bindModal();
+
+      this.observeSentinels();
+      this.renderInitial();
+      this.bindModal();
+
+      // Fetch shared settings.json and merge (non-secrets overwrite defaults)
+      loadSharedSettings().then(shared => {
+        if (!shared) return;
+        const { preferences = {}, holidays = {}, repo = {} } = shared;
+        this.settings.owner = repo.owner || this.settings.owner || '';
+        this.settings.repo  = repo.name  || this.settings.repo  || 'Calendar';
+        this.settings.timeFormat24h = preferences.timeFormat24h ?? this.settings.timeFormat24h;
+        this.settings.weekStart = preferences.weekStart ?? this.settings.weekStart;
+        this.settings.timezone = preferences.timezone ?? this.settings.timezone;
+        this.settings.theme = preferences.theme ?? this.settings.theme;
+        this.settings.holidays = { ...this.settings.holidays, ...holidays };
+        // Re-render visible months with updated prefs (base events remain)
+        this.monthNodes.forEach(section => {
+          const grid = section.querySelector('.month-grid');
+          const key = section.dataset.monthKey;
+          const date = parseISODate(key + '-01');
+          this.renderGrid(date, grid, section.__events || []);
+        });
+        announceStatus('Loaded shared settings from config/settings.json');
+      });
     }
 
     observeSentinels(){
@@ -81,9 +134,7 @@
       const header=document.createElement('header'); header.className='month-header';
       const title=document.createElement('h2'); title.textContent=new Intl.DateTimeFormat(undefined,{month:'long', year:'numeric'}).format(date); title.className='month-title'; header.appendChild(title);
 
-      // Toggle bar — now includes Trips
       const toggles=document.createElement('div'); toggles.className='holiday-toggles';
-      ;['Mon','Tue','Wed','Thu','Fri','Sat','Sun']; // placeholder for clarity only
       const mkBtn=(label,key)=>{ const b=document.createElement('button'); b.type='button'; b.className='holiday-toggle'; b.dataset.country=key; b.setAttribute('aria-pressed','false'); b.textContent=label; b.addEventListener('click', ()=> this.toggleOverlay(key, date, wrap, b)); return b; };
       toggles.appendChild(mkBtn('Trips','tripit'));
       toggles.appendChild(mkBtn('US','us'));
