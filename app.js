@@ -1,12 +1,14 @@
 /*
-  Calendar App — app.js (v5)
-  - Loads shared config from config/settings.json (non-secrets) and merges with local settings
-  - Keeps TripIt URL and GitHub PAT local-only for safety (but see notes below)
-  - Includes 2-year future scroll + fixed weekday headers + Trips toggle
+  Calendar App — app.js (v6)
+  - Loads shared config from config/settings.json (preferences, holidays, repo, integrations.tripitIcalUrl)
+  - Merges with local settings (keeps PAT local)
+  - Trips overlay button uses shared TripIt URL by default
+  - 2‑year future scrolling (current + 24 months), fixed month math
+  - Weekday headers aligned as the first row of the grid
 */
 
 ;(() => {
-  const TZ = 'Europe/Amsterdam';
+  const DEFAULT_TZ = 'Europe/Amsterdam';
   const STATUS_EL = () => document.getElementById('status');
 
   // ---------------------------
@@ -14,9 +16,15 @@
   // ---------------------------
   const SETTINGS_KEY = 'calendar.settings.v1';
   const defaultSettings = {
-    owner: '', repo: 'Calendar', token: '',
-    timeFormat24h: true, weekStart: 1, timezone: TZ, theme: 'light',
-    tripitIcalUrl: '', holidays: { usUrl: '', ukUrl: '', nlUrl: '' }
+    owner: '',
+    repo: 'Calendar',
+    token: '', // PAT (local only)
+    timeFormat24h: true,
+    weekStart: 1,
+    timezone: DEFAULT_TZ,
+    theme: 'light',
+    tripitIcalUrl: '', // can be set by shared file integrations.tripitIcalUrl or local
+    holidays: { usUrl: '', ukUrl: '', nlUrl: '' }
   };
 
   function loadLocalSettings(){
@@ -44,16 +52,29 @@
   const toISODateLocal=(d)=> `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
   const parseISODate=(s)=> { const [y,m,dd]=s.split('-').map(Number); return new Date(y,m-1,dd); };
   const formatTimeHHMM=(d)=> `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  const announceStatus=(m)=> { const el=STATUS_EL(); if(el) el.textContent=m; };
+  const announceStatus=(m)=> { const el=STATUS_EL(); if(el) el.textContent=m; console.log('[status]', m); };
   const consoleWarn=(m,e)=> console.warn(m, e? String(e).replace(/ghp_[A-Za-z0-9]+/g,'***'): '');
   const uuid=()=> 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=crypto.getRandomValues(new Uint8Array(1))[0]&15; const v=c==='x'?r:(r&0x3|0x8); return v.toString(16);});
 
   // ---------------------------
-  // GitHub
+  // GitHub (via lib/github.js)
   // ---------------------------
   const GH={
-    async loadMonth(settings, y, m){ const path=`data/${y}-${pad(m)}.json`; try{ const res=await window.GitHubAPI.getFile(settings.owner, settings.repo, path, settings.token||undefined); if(!res) return {events:[], sha:null}; const arr=JSON.parse(res.content||'[]'); return {events:Array.isArray(arr)?arr:[], sha:res.sha||null}; }catch(e){ consoleWarn('loadMonth', e); return {events:[], sha:null}; } },
-    async saveMonth(settings, y, m, events, sha){ const path=`data/${y}-${pad(m)}.json`; const body=JSON.stringify(events, null, 2); const msg=`feat(events): update ${y}-${pad(m)} (${events.length} record${events.length===1?'':'s'})`; return window.GitHubAPI.putFile(settings.owner, settings.repo, path, body, sha||undefined, settings.token, msg); }
+    async loadMonth(settings, y, m){
+      const path=`data/${y}-${pad(m)}.json`;
+      try{
+        const res=await window.GitHubAPI.getFile(settings.owner, settings.repo, path, settings.token||undefined);
+        if(!res) return {events:[], sha:null};
+        const arr=JSON.parse(res.content||'[]');
+        return {events:Array.isArray(arr)?arr:[], sha:res.sha||null};
+      }catch(e){ consoleWarn('loadMonth', e); return {events:[], sha:null}; }
+    },
+    async saveMonth(settings, y, m, events, sha){
+      const path=`data/${y}-${pad(m)}.json`;
+      const body=JSON.stringify(events, null, 2);
+      const msg=`feat(events): update ${y}-${pad(m)} (${events.length} record${events.length===1?'':'s'})`;
+      return window.GitHubAPI.putFile(settings.owner, settings.repo, path, body, sha||undefined, settings.token, msg);
+    }
   };
 
   // ---------------------------
@@ -61,7 +82,14 @@
   // ---------------------------
   const OverlayCache=new Map();
   async function fetchICS(url){ const r=await fetch(url,{cache:'no-store'}); if(!r.ok) throw new Error('ICS fetch '+r.status); const txt=await r.text(); return window.ICS.parseICS(txt); }
-  function filterEventsToMonth(evts, monthDate){ const s=monthStart(monthDate), e=monthEnd(monthDate); return evts.filter(x=>{ const d=x.start instanceof Date? x.start : new Date(x.start); return d>=s && d<=e; }).map(x=>({ id:x.id||uuid(), title:x.summary||x.title||'Untitled', date:toISODateLocal(new Date(x.start)), startTime:x.start instanceof Date? formatTimeHHMM(x.start):'', endTime:x.end instanceof Date? formatTimeHHMM(x.end):'', notes:x.description||'', url:x.url||'', __overlay:true })); }
+  function filterEventsToMonth(evts, monthDate){
+    const s=monthStart(monthDate), e=monthEnd(monthDate);
+    return evts.filter(x=>{ const d=x.start instanceof Date? x.start : new Date(x.start); return d>=s && d<=e; }).map(x=>({
+      id:x.id||uuid(), title:x.summary||x.title||'Untitled', date:toISODateLocal(new Date(x.start)),
+      startTime:x.start instanceof Date? formatTimeHHMM(x.start):'', endTime:x.end instanceof Date? formatTimeHHMM(x.end):'',
+      notes:x.description||'', url:x.url||'', __overlay:true
+    }));
+  }
   async function getOverlay(key, url, monthDate){ if(!url) return []; const k=`${key}|${fmtMonthKey(monthDate)}`; if(OverlayCache.has(k)) return OverlayCache.get(k); try{ const raw=await fetchICS(url); const m=filterEventsToMonth(raw, monthDate); OverlayCache.set(k,m); return m; }catch(e){ consoleWarn('overlay '+key, e); return []; } }
 
   // ---------------------------
@@ -72,6 +100,7 @@
       this.settings = loadLocalSettings();
       this.root=document.getElementById(rootId); if(!this.root) throw new Error('#monthsContainer missing');
       this.root.classList.add('calendar-scroll');
+
       this.loadedKeys=new Set(); this.monthNodes=[]; this.current=new Date();
       this.maxFuture=addMonths(this.current, 24);
 
@@ -79,10 +108,10 @@
       this.renderInitial();
       this.bindModal();
 
-      // Fetch shared settings.json and merge (non-secrets overwrite defaults)
+      // Fetch shared settings and merge
       loadSharedSettings().then(shared => {
         if (!shared) return;
-        const { preferences = {}, holidays = {}, repo = {} } = shared;
+        const { preferences = {}, holidays = {}, repo = {}, integrations = {} } = shared;
         this.settings.owner = repo.owner || this.settings.owner || '';
         this.settings.repo  = repo.name  || this.settings.repo  || 'Calendar';
         this.settings.timeFormat24h = preferences.timeFormat24h ?? this.settings.timeFormat24h;
@@ -90,7 +119,10 @@
         this.settings.timezone = preferences.timezone ?? this.settings.timezone;
         this.settings.theme = preferences.theme ?? this.settings.theme;
         this.settings.holidays = { ...this.settings.holidays, ...holidays };
-        // Re-render visible months with updated prefs (base events remain)
+        if (integrations.tripitIcalUrl) {
+          this.settings.tripitIcalUrl = integrations.tripitIcalUrl;
+        }
+        // re-render visible months to apply changes
         this.monthNodes.forEach(section => {
           const grid = section.querySelector('.month-grid');
           const key = section.dataset.monthKey;
@@ -165,7 +197,7 @@
       btn.setAttribute('aria-pressed', String(!pressed));
       const urls={ tripit: this.settings.tripitIcalUrl, us: this.settings.holidays.usUrl, uk: this.settings.holidays.ukUrl, nl: this.settings.holidays.nlUrl };
       const url = urls[key];
-      if(!url){ announceStatus(`${key==='tripit'?'TripIt':'Holiday'} URL not configured in Settings.`); }
+      if(!url){ announceStatus(`${key==='tripit'?'TripIt':'Holiday'} URL not configured.`); }
       const grid = section.querySelector('.month-grid'); if(!grid) return;
       const base = section.__events||[]; const overlay = !pressed && url? await getOverlay(key, url, date) : [];
       await this.renderGrid(date, grid, base.concat(overlay));
@@ -173,12 +205,16 @@
 
     async renderGrid(date, grid, events){
       grid.innerHTML='';
+      // Weekday header row (aligned to columns)
       ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(n=>{ const h=document.createElement('div'); h.className='weekday'; h.textContent=n; grid.appendChild(h); });
+
       const first=new Date(date.getFullYear(), date.getMonth(), 1);
-      const firstWeekday=(first.getDay()+6)%7; const leading=firstWeekday;
+      const firstWeekday=(first.getDay()+6)%7; // Monday-first
+      const leading=firstWeekday;
       const daysInMonth=new Date(date.getFullYear(), date.getMonth()+1, 0).getDate();
       const totalCells = leading + daysInMonth + (7 - ((leading + daysInMonth) % 7 || 7));
       const todayISO=toISODateLocal(new Date());
+
       for(let i=0;i<totalCells;i++){
         const cell=document.createElement('div'); cell.className='day-cell'; cell.setAttribute('role','gridcell');
         const dayNum=i - leading + 1;
@@ -200,7 +236,16 @@
       this.f.save?.addEventListener('click',()=> this.onSaveEvent()); this.f.del?.addEventListener('click',()=> this.onDeleteEvent()); this.f.cancel?.addEventListener('click',()=> this.closeModal());
       this.modal.addEventListener('keydown',(e)=>{ if(e.key==='Escape') this.closeModal(); });
     }
-    openEventModal(ev){ if(!this.modal) return; const isNew=!ev.id; const dflt={ id:'', title:'', date:toISODateLocal(new Date()), startTime:'', endTime:'', notes:'', url:'' }; const data={...dflt, ...ev}; this.editingMonthKey=data.date.slice(0,7); this.f.id.value=data.id||''; this.f.title.value=data.title||''; this.f.date.value=data.date||''; this.f.start.value=data.startTime||''; this.f.end.value=data.endTime||''; this.f.notes.value=data.notes||''; this.f.url.value=data.url||''; if(this.f.del) this.f.del.style.display=isNew?'none':''; this.modal.showModal?.(); this.f.title?.focus(); }
+
+    openEventModal(ev){
+      if(!this.modal) return;
+      const isNew=!ev.id; const dflt={ id:'', title:'', date:toISODateLocal(new Date()), startTime:'', endTime:'', notes:'', url:'' };
+      const data={...dflt, ...ev}; this.editingMonthKey=data.date.slice(0,7);
+      this.f.id.value=data.id||''; this.f.title.value=data.title||''; this.f.date.value=data.date||''; this.f.start.value=data.startTime||''; this.f.end.value=data.endTime||''; this.f.notes.value=data.notes||''; this.f.url.value=data.url||'';
+      if(this.f.del) this.f.del.style.display=isNew?'none':'';
+      this.modal.showModal?.(); this.f.title?.focus();
+    }
+
     closeModal(){ try{ this.modal.close?.(); }catch{} }
     findSectionByKey(key){ return this.monthNodes.find(n=> n.dataset.monthKey===key); }
     collectBaseEvents(section){ return Array.isArray(section.__events)? section.__events.filter(e=> !e.__overlay) : []; }
