@@ -81,8 +81,36 @@
   // Overlays (TripIt + Holidays)
   // ---------------------------
   const OverlayCache=new Map();
-  async function fetchICS(url){ const r=await fetch(url,{cache:'no-store'}); if(!r.ok) throw new Error('ICS fetch '+r.status); const txt=await r.text(); return window.ICS.parseICS(txt); }
-  function filterEventsToMonth(evts, monthDate){
+// Fetch an iCalendar feed and parse it.  TripIt feeds may not set CORS headers,
+// causing a direct fetch to fail.  This helper first tries to fetch the URL
+// directly; if that request fails (e.g. network error or non‑OK status), it
+// falls back to a simple public CORS proxy.  Without this fallback the Trips
+// overlay button silently does nothing when the TripIt URL cannot be loaded.
+async function fetchICS(url) {
+  // Attempt direct fetch first
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (res.ok) {
+      const txt = await res.text();
+      return window.ICS.parseICS(txt);
+    }
+  } catch (e) {
+    // Ignore errors and fall through to proxy below
+  }
+  // Fallback via CORS proxy when direct fetch fails (e.g. due to CORS)
+  try {
+    const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(url);
+    const res2 = await fetch(proxyUrl, { cache: 'no-store' });
+    if (!res2.ok) throw new Error('ICS fetch ' + res2.status);
+    const txt2 = await res2.text();
+    return window.ICS.parseICS(txt2);
+  } catch (e) {
+    // If the proxy also fails, propagate the error so the overlay can be skipped
+    throw e;
+  }
+}
+
+    function filterEventsToMonth(evts, monthDate){
     const s=monthStart(monthDate), e=monthEnd(monthDate);
     return evts.filter(x=>{ const d=x.start instanceof Date? x.start : new Date(x.start); return d>=s && d<=e; }).map(x=>({
       id:x.id||uuid(), title:x.summary||x.title||'Untitled', date:toISODateLocal(new Date(x.start)),
