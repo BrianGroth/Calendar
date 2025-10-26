@@ -1,167 +1,133 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Calendar Settings</title>
-  <!-- Reuse main styles for typography and buttons -->
-  <link rel="stylesheet" href="styles.css">
-  <style>
-    /* Additional styles specific to settings page */
-    .settings-container {
-      max-width: 600px;
-      margin: 2rem auto;
-      padding: 1rem;
-      background-color: #fff;
-      border: 1px solid #eee;
-      border-radius: 4px;
-    }
-    .settings-container h1 {
-      margin-top: 0;
-      font-size: 1.5rem;
-    }
-    .settings-container form {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-    }
-    .settings-container label {
-      display: flex;
-      flex-direction: column;
-      font-size: 0.875rem;
-    }
-    .form-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 0.5rem;
-    }
-    .note {
-      font-size: 0.75rem;
-      color: #666;
-    }
-    input[type="password"] {
-      font-family: monospace;
-    }
-  </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Calendar · Settings</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <main class="settings-container">
+  <header class="app-header">
     <h1>Settings</h1>
-    <form id="settingsForm">
-      <label>
-        GitHub Owner
-        <input type="text" id="owner" name="owner" placeholder="e.g. BrianGroth" required>
-      </label>
-      <label>
-        Repository Name
-        <input type="text" id="repo" name="repo" placeholder="e.g. Calendar" required>
-      </label>
-      <label>
-        Personal Access Token
-        <input type="password" id="token" name="token" placeholder="ghp_..." autocomplete="new-password">
-        <span class="note">Stored locally only; never sent to the server except when saving events.</span>
-      </label>
-      <label>
-        TripIt iCal URL
-        <input type="url" id="tripitIcalUrl" name="tripitIcalUrl" placeholder="https://...">
-        <span class="note">Leave blank if you don't want TripIt overlay.</span>
-      </label>
+    <nav><a class="btn" href="index.html">Back to Calendar</a></nav>
+  </header>
+
+  <main class="settings">
+    <form id="settingsForm" autocomplete="off">
       <fieldset>
-        <legend>Holiday iCal URLs</legend>
-        <label>
-          US Holidays
-          <input type="url" id="holidaysUsUrl" name="holidays.usUrl" placeholder="https://...">
+        <legend>GitHub</legend>
+        <label>Repo owner
+          <input id="owner" required placeholder="YourGitHubUser" />
         </label>
-        <label>
-          UK Holidays
-          <input type="url" id="holidaysUkUrl" name="holidays.ukUrl" placeholder="https://...">
+        <label>Repo name
+          <input id="repo" required placeholder="Calendar" />
         </label>
-        <label>
-          Netherlands Holidays
-          <input type="url" id="holidaysNlUrl" name="holidays.nlUrl" placeholder="https://...">
+        <label>Personal Access Token (PAT)
+          <input id="token" type="password" placeholder="••••••••" />
         </label>
       </fieldset>
-      <label>
-        Timezone
-        <input type="text" id="timezone" name="timezone" placeholder="e.g. Europe/Amsterdam">
-      </label>
-      <label>
-        Week starts on
-        <select id="weekStart" name="weekStart">
-          <option value="1">Monday</option>
-          <option value="0">Sunday</option>
-        </select>
-      </label>
-      <label>
-        Time format
-        <select id="timeFormat" name="timeFormat">
-          <option value="24h">24‑hour</option>
-          <option value="12h">12‑hour</option>
-        </select>
-      </label>
-      <label>
-        Theme
-        <select id="theme" name="theme">
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-        </select>
-      </label>
-      <div class="form-actions">
-        <button type="submit">Save</button>
-        <button type="button" id="cancelSettings">Cancel</button>
-      </div>
+
+      <fieldset>
+        <legend>Calendar preferences</legend>
+        <label>Week starts on
+          <select id="weekStart">
+            <option value="1" selected>Monday</option>
+            <option value="0">Sunday</option>
+          </select>
+        </label>
+        <label>Time format
+          <select id="timeFormat">
+            <option value="24" selected>24-hour</option>
+            <option value="12">12-hour</option>
+          </select>
+        </label>
+        <label>Timezone (IANA)
+          <input id="timeZone" value="Europe/Amsterdam" />
+        </label>
+        <label>Theme
+          <select id="theme">
+            <option value="light" selected>Light</option>
+            <option value="auto">Auto</option>
+          </select>
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>TripIt</legend>
+        <label>TripIt iCal URL (private)
+          <input id="tripitUrl" type="url" placeholder="https://www.tripit.com/feed/ical/private/....ics" />
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Holiday iCal URLs</legend>
+        <label>US holidays iCal URL
+          <input id="holUS" type="url" placeholder="https://...us.ics" />
+        </label>
+        <label>UK holidays iCal URL
+          <input id="holUK" type="url" placeholder="https://...uk.ics" />
+        </label>
+        <label>NL holidays iCal URL
+          <input id="holNL" type="url" placeholder="https://...nl.ics" />
+        </label>
+      </fieldset>
+
+      <menu>
+        <button type="button" id="clear">Clear local settings</button>
+        <button class="btn" type="submit">Save</button>
+      </menu>
     </form>
+
+    <p class="help">
+      Notes: Your PAT and iCal URLs are stored only in your browser’s localStorage and are never committed to the repo.
+      If a token leaks, revoke it in GitHub → Settings → Developer settings → Personal access tokens.
+    </p>
   </main>
-  <script>
-    // Load settings from localStorage and populate the form
-    function loadSettings() {
-      const raw = localStorage.getItem('calendarSettings');
-      let settings = {};
-      if (raw) {
-        try { settings = JSON.parse(raw); } catch (e) {}
-      }
-      document.getElementById('owner').value = settings.owner || '';
-      document.getElementById('repo').value = settings.repo || '';
-      document.getElementById('token').value = settings.token || '';
-      document.getElementById('tripitIcalUrl').value = settings.tripitIcalUrl || '';
-      const holidays = settings.holidays || {};
-      document.getElementById('holidaysUsUrl').value = holidays.usUrl || '';
-      document.getElementById('holidaysUkUrl').value = holidays.ukUrl || '';
-      document.getElementById('holidaysNlUrl').value = holidays.nlUrl || '';
-      document.getElementById('timezone').value = settings.timezone || 'Europe/Amsterdam';
-      document.getElementById('weekStart').value = settings.weekStart != null ? settings.weekStart : 1;
-      document.getElementById('timeFormat').value = settings.timeFormat || '24h';
-      document.getElementById('theme').value = settings.theme || 'light';
-    }
-    // Save settings back to localStorage
-    function saveSettings() {
-      const settings = {
-        owner: document.getElementById('owner').value.trim(),
-        repo: document.getElementById('repo').value.trim(),
-        token: document.getElementById('token').value.trim(),
-        tripitIcalUrl: document.getElementById('tripitIcalUrl').value.trim(),
+
+  <script type="module">
+    import { getSettings, setSettings, clearSettings } from './lib/github.js';
+
+    const form = document.getElementById('settingsForm');
+    const s = getSettings();
+
+    form.owner.value = s.owner || '';
+    form.repo.value = s.repo || 'Calendar';
+    form.token.value = s.token || '';
+    form.weekStart.value = String(s.weekStart ?? 1);
+    form.timeFormat.value = String(s.timeFormat ?? 24);
+    form.timeZone.value = s.timeZone || 'Europe/Amsterdam';
+    form.theme.value = s.theme || 'light';
+    form.tripitUrl.value = s.tripitUrl || '';
+    form.holUS.value = s.holidays?.us || '';
+    form.holUK.value = s.holidays?.uk || '';
+    form.holNL.value = s.holidays?.nl || '';
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      setSettings({
+        owner: form.owner.value.trim(),
+        repo: form.repo.value.trim(),
+        token: form.token.value.trim(),
+        weekStart: Number(form.weekStart.value),
+        timeFormat: Number(form.timeFormat.value),
+        timeZone: form.timeZone.value.trim(),
+        theme: form.theme.value,
+        tripitUrl: form.tripitUrl.value.trim(),
         holidays: {
-          usUrl: document.getElementById('holidaysUsUrl').value.trim(),
-          ukUrl: document.getElementById('holidaysUkUrl').value.trim(),
-          nlUrl: document.getElementById('holidaysNlUrl').value.trim()
+          us: form.holUS.value.trim(),
+          uk: form.holUK.value.trim(),
+          nl: form.holNL.value.trim(),
         },
-        timezone: document.getElementById('timezone').value.trim() || 'Europe/Amsterdam',
-        weekStart: parseInt(document.getElementById('weekStart').value, 10),
-        timeFormat: document.getElementById('timeFormat').value,
-        theme: document.getElementById('theme').value
-      };
-      localStorage.setItem('calendarSettings', JSON.stringify(settings));
-    }
-    document.getElementById('settingsForm').addEventListener('submit', function(event) {
-      event.preventDefault();
-      saveSettings();
-      // Redirect back to calendar
-      window.location.href = 'index.html';
+      });
+      alert('Settings saved locally.');
     });
-    document.getElementById('cancelSettings').addEventListener('click', function() {
-      window.location.href = 'index.html';
+
+    document.getElementById('clear').addEventListener('click', () => {
+      if (confirm('Clear all locally saved settings?')) {
+        clearSettings();
+        location.reload();
+      }
     });
-    loadSettings();
   </script>
 </body>
 </html>

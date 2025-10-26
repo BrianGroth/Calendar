@@ -1,86 +1,91 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Shared Calendar</title>
-  <!--
-    This is the main entry point for the calendar application.  It loads the
-    application styles and scripts along with a locally shipped copy of
-    date‑fns.  The calendar defaults to a monthly view with weeks starting on
-    Monday and uses 24‑hour time.  A global header shows the current month
-    along with holiday toggles.  Users can add, edit and delete events by
-    interacting with the calendar cells.  There are no recurring events;
-    everything is stored in month‑scoped JSON files (see data/ directory).
-  -->
-  <link rel="stylesheet" href="styles.css">
-  <!-- vendor/date‑fns.min.js exposes a global `dateFns` object -->
-  <script src="vendor/date-fns.min.js"></script>
-  <!-- minimal iCalendar parser -->
-  <script src="lib/ics.js"></script>
-  <!-- GitHub API helper -->
-  <script src="lib/github.js"></script>
-  <!-- main application logic (deferred to ensure DOM is ready) -->
-  <script src="app.js" defer></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Calendar</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="app-header">
-    <div class="header-row">
-      <button id="settingsButton" class="icon-button" aria-label="Open settings">⚙️</button>
-      <div class="month-navigation">
-        <button id="prevMonth" class="nav-button" aria-label="Previous month">‹</button>
-        <h1 id="monthTitle" aria-live="polite">Loading…</h1>
-        <button id="nextMonth" class="nav-button" aria-label="Next month">›</button>
-      </div>
-      <div class="holiday-toggles" aria-label="Holiday overlays">
-        <label><input type="checkbox" id="toggleHolidayUS"> US</label>
-        <label><input type="checkbox" id="toggleHolidayUK"> UK</label>
-        <label><input type="checkbox" id="toggleHolidayNL"> NL</label>
-      </div>
-    </div>
+  <header class="app-header" role="banner">
+    <h1 id="appTitle">Calendar</h1>
+    <nav aria-label="Primary">
+      <a class="btn" href="settings.html" aria-label="Open Settings">Settings</a>
+    </nav>
   </header>
-  <main id="calendarContainer" tabindex="0"></main>
 
-  <!-- Modal dialog for adding/editing events -->
-  <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" aria-hidden="true">
-    <div class="modal-content">
-      <h2 id="modalTitle">Add Event</h2>
-      <form id="eventForm">
-        <input type="hidden" id="eventId" name="id">
-        <label>
-          Title
-          <input type="text" id="eventTitle" name="title" required>
-        </label>
+  <main id="main" role="main">
+    <section class="month-controls">
+      <button id="prevMonth" class="btn" aria-label="Previous month">←</button>
+      <h2 id="monthLabel" aria-live="polite"></h2>
+      <button id="nextMonth" class="btn" aria-label="Next month">→</button>
+    </section>
+
+    <section class="holiday-toggles" aria-label="Holiday overlays">
+      <label><input type="checkbox" id="toggleUS" /> US</label>
+      <label><input type="checkbox" id="toggleUK" /> UK</label>
+      <label><input type="checkbox" id="toggleNL" /> NL</label>
+      <button id="reloadOverlays" class="btn btn-secondary">Reload</button>
+    </section>
+
+    <section id="calendar" class="calendar" aria-label="Monthly calendar" role="grid" aria-readonly="false">
+      <!-- Grid injected by app.js -->
+    </section>
+  </main>
+
+  <!-- Add/Edit Modal -->
+  <dialog id="eventModal" aria-labelledby="eventModalTitle">
+    <form method="dialog" id="eventForm">
+      <h3 id="eventModalTitle">Add Event</h3>
+
+      <label>
+        Title
+        <input id="evtTitle" name="title" type="text" required />
+      </label>
+
+      <div class="row">
         <label>
           Date
-          <input type="date" id="eventDate" name="date" required>
+          <input id="evtDate" name="date" type="date" required />
         </label>
         <label>
-          Start time
-          <input type="time" id="eventStart" name="startTime" required>
+          Start (24h)
+          <input id="evtStart" name="startTime" type="time" />
         </label>
         <label>
-          End time
-          <input type="time" id="eventEnd" name="endTime" required>
+          End (24h)
+          <input id="evtEnd" name="endTime" type="time" />
         </label>
-        <label>
-          Notes
-          <textarea id="eventNotes" name="notes" rows="3"></textarea>
-        </label>
-        <label>
-          URL
-          <input type="url" id="eventUrl" name="url" placeholder="https://">
-        </label>
-        <div class="modal-actions">
-          <button type="submit" id="saveEvent">Save</button>
-          <button type="button" id="deleteEvent" class="danger" hidden>Delete</button>
-          <button type="button" id="cancelEvent">Cancel</button>
-        </div>
-      </form>
-    </div>
-  </div>
+      </div>
 
-  <!-- Settings overlay (separate page) link is defined in settings.html) -->
+      <label>
+        URL (TripIt or other)
+        <input id="evtUrl" name="url" type="url" placeholder="https://..." />
+      </label>
+
+      <label>
+        Notes
+        <textarea id="evtNotes" name="notes" rows="3"></textarea>
+      </label>
+
+      <menu>
+        <button id="deleteBtn" class="btn danger" value="delete" type="button">Delete</button>
+        <button class="btn btn-secondary" value="cancel">Cancel</button>
+        <button class="btn" id="saveBtn" value="default">Save</button>
+      </menu>
+      <input type="hidden" id="evtId" name="id" />
+    </form>
+  </dialog>
+
+  <footer class="statusbar" role="status" aria-live="polite" id="statusBar"></footer>
+
+  <script type="module">
+    import { getSettings } from './lib/github.js';
+    import { initCalendarApp } from './app.js';
+
+    // Basic boot
+    const settings = getSettings();
+    initCalendarApp(settings);
+  </script>
 </body>
 </html>
