@@ -97,7 +97,16 @@
       const ioTop=new IntersectionObserver(es=>{ es.forEach(e=>{ if(!e.isIntersecting) return; const firstKey=this.monthNodes[0]?.dataset?.monthKey||fmtMonthKey(this.current); const [y,m]=firstKey.split('-').map(Number); const prev=new Date(y, m-2, 1); this.ensureMonth(prev); }); }, {root:this.root, threshold:0.9});
       ioTop.observe(top);
 
-      const ioBottom=new IntersectionObserver(es=>{ es.forEach(e=>{ if(!e.isIntersecting) return; const lastKey=this.monthNodes[this.monthNodes.length-1]?.dataset?.monthKey||fmtMonthKey(this.current); const [y,m]=lastKey.split('-').map(Number); const next=new Date(y, m, 1); next.setMonth(next.getMonth()+1); if(next>this.maxFuture) return; this.ensureMonth(next); }); }, {root:this.root, threshold:0.9});
+      const ioBottom=new IntersectionObserver(es=>{ es.forEach(e=>{ if(!e.isIntersecting) return; 
+                                                                  const lastKey = this.monthNodes[this.monthNodes.length - 1]?.dataset?.monthKey || fmtMonthKey(this.current);
+const [y, m] = lastKey.split('-').map(Number);
+// m is 1..12, Date() expects 0..11 → use (m - 1)
+const base = new Date(y, m - 1, 1);
+base.setMonth(base.getMonth() + 1); // next month
+if (base > this.maxFuture) return;
+this.ensureMonth(base);
+ 
+                                                                  }); }, {root:this.root, threshold:0.9});
       ioBottom.observe(bottom);
     }
 
