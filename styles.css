@@ -1,0 +1,247 @@
+/*
+  Base styles for the shared calendar application.  The design is mobile‑first
+  and accessible: large tap targets, focus outlines and appropriate ARIA
+  attributes.  Light theme is used by default.  Styles are broken into
+  sections for the header, calendar grid, events and modal dialog.
+*/
+
+/* Reset some default margins/paddings */
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  background-color: #fdfdfd;
+  color: #222;
+}
+
+.app-header {
+  background-color: #f8f8f8;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 0.5rem 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.icon-button {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0.25rem;
+}
+.icon-button:focus {
+  outline: 2px solid #007bff;
+  outline-offset: 2px;
+}
+
+.month-navigation {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.month-navigation h1 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.nav-button {
+  background-color: #ffffff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.nav-button:hover {
+  background-color: #f0f0f0;
+}
+.nav-button:focus {
+  outline: 2px solid #007bff;
+  outline-offset: 2px;
+}
+
+.holiday-toggles {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+.holiday-toggles label {
+  cursor: pointer;
+  user-select: none;
+}
+.holiday-toggles input {
+  margin-right: 0.25rem;
+}
+
+/* Calendar container holds month sections stacked vertically. */
+#calendarContainer {
+  padding: 0;
+  overflow-y: auto;
+  height: calc(100vh - 60px);
+  scroll-behavior: smooth;
+}
+
+.month-section {
+  margin: 1rem;
+}
+.month-section .month-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+.month-section .month-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.month-section .holiday-toggles {
+  font-size: 0.75rem;
+}
+
+/* Grid for a month: 7 columns, dynamic rows */
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  background-color: #ccc;
+}
+.day-cell {
+  background-color: #fff;
+  min-height: 6rem;
+  padding: 0.25rem;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  cursor: pointer;
+}
+.day-cell.outside {
+  background-color: #fafafa;
+  color: #aaa;
+}
+.day-cell:focus {
+  outline: 2px solid #007bff;
+  outline-offset: -2px;
+}
+.day-header {
+  font-weight: 600;
+  font-size: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+.events-container {
+  flex: 1;
+  overflow: hidden;
+}
+.event-item {
+  background-color: #e6f2ff;
+  border-left: 3px solid #339af0;
+  padding: 2px 4px;
+  margin-bottom: 2px;
+  border-radius: 2px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.overlay-event {
+  background-color: #fff7e6;
+  border-left-color: #f0ad4e;
+}
+
+/* Modal styles */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.modal[aria-hidden="false"] {
+  display: flex;
+}
+.modal-content {
+  background-color: #fff;
+  padding: 1rem;
+  border-radius: 4px;
+  width: 90%;
+  max-width: 420px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+.modal-content h2 {
+  margin-top: 0;
+  font-size: 1.25rem;
+}
+.modal-content form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.modal-content label {
+  font-size: 0.875rem;
+  display: flex;
+  flex-direction: column;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+button {
+  font-size: 0.875rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: #fff;
+}
+button:hover {
+  background-color: #f0f0f0;
+}
+button:focus {
+  outline: 2px solid #007bff;
+  outline-offset: 2px;
+}
+button.danger {
+  background-color: #d9534f;
+  color: #fff;
+  border-color: #d9534f;
+}
+button.danger:hover {
+  background-color: #c9302c;
+}
+
+/* Accessibility helper for visually hidden text (unused but available) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
