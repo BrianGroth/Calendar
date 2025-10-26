@@ -1,0 +1,20 @@
+{
+  "preferences": {
+    "theme": "light",
+    "weekStart": 1,
+    "timeFormat24h": true,
+    "timezone": "Europe/Amsterdam"
+  },
+  "holidays": {
+    "usUrl": "https://www.officeholidays.com/ics-fed/usa",
+    "ukUrl": "https://www.calendarlabs.com/ical-calendar/holidays/uk-holidays-75/",
+    "nlUrl": "https://www.officeholidays.com/ics/netherlands"
+  },
+  "repo": {
+    "owner": "BrianGroth",
+    "name": "Calendar"
+  },
+  "integrations": {
+    "tripitIcalUrl": "https://www.tripit.com/feed/ical/private/B7836231-F75B824C12699491D8912CB3321BEDE7/tripit.ics"
+  }
+}

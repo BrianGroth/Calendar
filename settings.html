@@ -1,133 +1,247 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Calendar · Settings</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Settings • Shared Calendar</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="app-header">
+  <header class="topbar">
     <h1>Settings</h1>
-    <nav><a class="btn" href="index.html">Back to Calendar</a></nav>
+    <nav>
+      <a href="index.html"><button type="button">← Back to Calendar</button></a>
+    </nav>
   </header>
 
   <main class="settings">
-    <form id="settingsForm" autocomplete="off">
-      <fieldset>
-        <legend>GitHub</legend>
-        <label>Repo owner
-          <input id="owner" required placeholder="YourGitHubUser" />
+    <section class="card">
+      <h2>GitHub Repository</h2>
+      <p class="hint">PAT is used for committing settings and saving events. It's stored locally unless you put it in the repo (not recommended).</p>
+      <div class="grid">
+        <label>
+          Owner (username)
+          <input id="owner" type="text" placeholder="your-github-username" autocomplete="username" />
         </label>
-        <label>Repo name
-          <input id="repo" required placeholder="Calendar" />
+        <label>
+          Repository name
+          <input id="repo" type="text" placeholder="Calendar" />
         </label>
-        <label>Personal Access Token (PAT)
-          <input id="token" type="password" placeholder="••••••••" />
+        <label>
+          GitHub Token (PAT)
+          <input id="token" type="password" placeholder="ghp_..." autocomplete="off" />
         </label>
-      </fieldset>
+      </div>
+    </section>
 
-      <fieldset>
-        <legend>Calendar preferences</legend>
-        <label>Week starts on
-          <select id="weekStart">
-            <option value="1" selected>Monday</option>
-            <option value="0">Sunday</option>
-          </select>
+    <section class="card" style="margin-top:1rem;">
+      <h2>Calendars & Integrations</h2>
+      <div class="grid">
+        <label>
+          TripIt iCal URL
+          <input id="tripit" type="url" placeholder="https://www.tripit.com/feed/ical/private/.../basic.ics" />
         </label>
-        <label>Time format
-          <select id="timeFormat">
-            <option value="24" selected>24-hour</option>
-            <option value="12">12-hour</option>
-          </select>
+        <div class="row">
+          <label>
+            US Holidays iCal URL
+            <input id="hol_us" type="url" placeholder="https://...us-holidays.ics" />
+          </label>
+          <label>
+            UK Holidays iCal URL
+            <input id="hol_uk" type="url" placeholder="https://...uk-holidays.ics" />
+          </label>
+        </div>
+        <label>
+          NL Holidays iCal URL
+          <input id="hol_nl" type="url" placeholder="https://...nl-holidays.ics" />
         </label>
-        <label>Timezone (IANA)
-          <input id="timeZone" value="Europe/Amsterdam" />
-        </label>
-        <label>Theme
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:1rem;">
+      <h2>Preferences</h2>
+      <div class="grid">
+        <label>
+          Theme
           <select id="theme">
-            <option value="light" selected>Light</option>
-            <option value="auto">Auto</option>
+            <option value="light">Light</option>
           </select>
         </label>
-      </fieldset>
-
-      <fieldset>
-        <legend>TripIt</legend>
-        <label>TripIt iCal URL (private)
-          <input id="tripitUrl" type="url" placeholder="https://www.tripit.com/feed/ical/private/....ics" />
+        <label>
+          Week starts on
+          <select id="weekStart">
+            <option value="1">Monday</option>
+          </select>
         </label>
-      </fieldset>
-
-      <fieldset>
-        <legend>Holiday iCal URLs</legend>
-        <label>US holidays iCal URL
-          <input id="holUS" type="url" placeholder="https://...us.ics" />
+        <label>
+          Time format
+          <select id="timeFormat">
+            <option value="24">24-hour</option>
+          </select>
         </label>
-        <label>UK holidays iCal URL
-          <input id="holUK" type="url" placeholder="https://...uk.ics" />
+        <label>
+          Timezone
+          <select id="timezone">
+            <option value="Europe/Amsterdam">Europe/Amsterdam</option>
+          </select>
         </label>
-        <label>NL holidays iCal URL
-          <input id="holNL" type="url" placeholder="https://...nl.ics" />
-        </label>
-      </fieldset>
-
-      <menu>
-        <button type="button" id="clear">Clear local settings</button>
-        <button class="btn" type="submit">Save</button>
-      </menu>
-    </form>
-
-    <p class="help">
-      Notes: Your PAT and iCal URLs are stored only in your browser’s localStorage and are never committed to the repo.
-      If a token leaks, revoke it in GitHub → Settings → Developer settings → Personal access tokens.
-    </p>
+      </div>
+      <div class="actions">
+        <button id="reloadSharedBtn" type="button">Reload Shared (read config/settings.json)</button>
+        <button id="saveBtn" type="button">Save (Local)</button>
+        <button id="saveSharedBtn" type="button">Save Shared (commit to repo)</button>
+        <button id="clearBtn" type="button">Clear Local Settings</button>
+      </div>
+      <p class="hint">Local saves go to your browser. "Save Shared" writes <code>config/settings.json</code> in the repo. Make sure the path is exactly <code>config/settings.json</code> (all lowercase).</p>
+    </section>
   </main>
 
-  <script type="module">
-    import { getSettings, setSettings, clearSettings } from './lib/github.js';
+  <div id="status" aria-live="polite" class="status"></div>
 
-    const form = document.getElementById('settingsForm');
-    const s = getSettings();
+  <script src="lib/github.js"></script>
+  <script>
+    (function(){
+      const KEY = 'calendar.settings.v1';
+      const defaults = {
+        owner: '', repo: 'Calendar', token: '',
+        timeFormat24h: true, weekStart: 1, timezone: 'Europe/Amsterdam', theme:'light',
+        tripitIcalUrl: '', holidays: { usUrl:'', ukUrl:'', nlUrl:'' }
+      };
 
-    form.owner.value = s.owner || '';
-    form.repo.value = s.repo || 'Calendar';
-    form.token.value = s.token || '';
-    form.weekStart.value = String(s.weekStart ?? 1);
-    form.timeFormat.value = String(s.timeFormat ?? 24);
-    form.timeZone.value = s.timeZone || 'Europe/Amsterdam';
-    form.theme.value = s.theme || 'light';
-    form.tripitUrl.value = s.tripitUrl || '';
-    form.holUS.value = s.holidays?.us || '';
-    form.holUK.value = s.holidays?.uk || '';
-    form.holNL.value = s.holidays?.nl || '';
+      function loadLocal(){ try{ const j=localStorage.getItem(KEY); return j? JSON.parse(j) : { ...defaults }; } catch{ return { ...defaults }; } }
+      function saveLocal(s){ localStorage.setItem(KEY, JSON.stringify(s)); }
+      function status(msg){ const el=document.getElementById('status'); if(el) el.textContent=msg; }
 
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      setSettings({
-        owner: form.owner.value.trim(),
-        repo: form.repo.value.trim(),
-        token: form.token.value.trim(),
-        weekStart: Number(form.weekStart.value),
-        timeFormat: Number(form.timeFormat.value),
-        timeZone: form.timeZone.value.trim(),
-        theme: form.theme.value,
-        tripitUrl: form.tripitUrl.value.trim(),
-        holidays: {
-          us: form.holUS.value.trim(),
-          uk: form.holUK.value.trim(),
-          nl: form.holNL.value.trim(),
-        },
-      });
-      alert('Settings saved locally.');
-    });
+      async function loadShared(){
+        // If opened as file:// the fetch will be blocked — remind user
+        if (location.protocol === 'file:') {
+          status('Open this page via your GitHub Pages URL (https://.../settings.html), not file://');
+        }
+        try {
+          const url = new URL('./config/settings.json', location.href);
+// cache-bust to avoid old versions
+url.searchParams.set('v', Date.now());
 
-    document.getElementById('clear').addEventListener('click', () => {
-      if (confirm('Clear all locally saved settings?')) {
-        clearSettings();
-        location.reload();
+const res = await fetch(url.toString(), { cache: 'no-store' });
+
+          if (!res.ok) { status('Could not read config/settings.json (HTTP '+res.status+').'); return null; }
+          const json = await res.json();
+          status('Loaded shared settings from config/settings.json');
+          return json;
+        } catch (e) {
+          status('Failed to fetch config/settings.json. Check path/case and that it exists.');
+          return null;
+        }
       }
-    });
+
+      function fillForm(from){
+        if (!from) return;
+        const $ = (id)=> document.getElementById(id);
+        const { preferences = {}, holidays = {}, repo = {}, integrations = {} } = from;
+        if (repo.owner) $('#owner').value = repo.owner;
+        if (repo.name)  $('#repo').value  = repo.name;
+        if (holidays.usUrl) $('#hol_us').value = holidays.usUrl;
+        if (holidays.ukUrl) $('#hol_uk').value = holidays.ukUrl;
+        if (holidays.nlUrl) $('#hol_nl').value = holidays.nlUrl;
+        if (integrations.tripitIcalUrl) $('#tripit').value = integrations.tripitIcalUrl;
+        if (preferences.theme) $('#theme').value = preferences.theme;
+        if (typeof preferences.weekStart === 'number') $('#weekStart').value = String(preferences.weekStart);
+        if (typeof preferences.timeFormat24h === 'boolean') $('#timeFormat').value = preferences.timeFormat24h ? '24' : '12';
+        if (preferences.timezone) $('#timezone').value = preferences.timezone;
+      }
+
+      // --- Init form: load local first, then overlay shared ---
+      const s = loadLocal();
+      const $ = (id) => document.getElementById(id);
+      $('#owner').value = s.owner || '';
+      $('#repo').value = s.repo || 'Calendar';
+      $('#token').value = s.token || '';
+      $('#tripit').value = s.tripitIcalUrl || '';
+      $('#hol_us').value = (s.holidays && s.holidays.usUrl) || '';
+      $('#hol_uk').value = (s.holidays && s.holidays.ukUrl) || '';
+      $('#hol_nl').value = (s.holidays && s.holidays.nlUrl) || '';
+      $('#theme').value = s.theme || 'light';
+      $('#weekStart').value = String(s.weekStart ?? 1);
+      $('#timeFormat').value = s.timeFormat24h ? '24' : '12';
+      $('#timezone').value = s.timezone || 'Europe/Amsterdam';
+
+      // Now overlay shared file values if available
+      loadShared().then(json => { if (json) fillForm(json); });
+
+      // Local save
+      $('#saveBtn').addEventListener('click', () => {
+        const next = {
+          owner: $('#owner').value.trim(),
+          repo: $('#repo').value.trim() || 'Calendar',
+          token: $('#token').value.trim(),
+          timeFormat24h: $('#timeFormat').value === '24',
+          weekStart: Number($('#weekStart').value || 1),
+          timezone: $('#timezone').value,
+          theme: $('#theme').value,
+          tripitIcalUrl: $('#tripit').value.trim(),
+          holidays: {
+            usUrl: $('#hol_us').value.trim(),
+            ukUrl: $('#hol_uk').value.trim(),
+            nlUrl: $('#hol_nl').value.trim()
+          }
+        };
+        saveLocal(next);
+        status('Settings saved locally.');
+      });
+
+      // Clear local
+      $('#clearBtn').addEventListener('click', () => {
+        localStorage.removeItem(KEY);
+        status('Local settings cleared. Page will now reload.');
+        setTimeout(() => window.location.reload(), 600);
+      });
+
+      // Save Shared (commit config/settings.json)
+      async function buildSharedJsonFromForm(){
+        return {
+          preferences: {
+            theme: document.getElementById('theme').value,
+            weekStart: Number(document.getElementById('weekStart').value || 1),
+            timeFormat24h: document.getElementById('timeFormat').value === '24',
+            timezone: document.getElementById('timezone').value
+          },
+          holidays: {
+            usUrl: document.getElementById('hol_us').value.trim(),
+            ukUrl: document.getElementById('hol_uk').value.trim(),
+            nlUrl: document.getElementById('hol_nl').value.trim()
+          },
+          repo: {
+            owner: document.getElementById('owner').value.trim(),
+            name:  (document.getElementById('repo').value.trim() || 'Calendar')
+          },
+          integrations: {
+            tripitIcalUrl: document.getElementById('tripit').value.trim()
+          }
+        };
+      }
+
+      async function saveShared(){
+        const owner = (document.getElementById('owner').value || '').trim();
+        const repo  = (document.getElementById('repo').value  || 'Calendar').trim();
+        const token = (document.getElementById('token').value || '').trim();
+        if (!owner || !repo || !token){ status('Owner, Repo and PAT are required to commit shared settings.'); return; }
+
+        const path = 'config/settings.json';
+        let sha = null;
+        try { const got = await window.GitHubAPI.getFile(owner, repo, path, token); sha = got?.sha || null; } catch {}
+
+        const content = JSON.stringify(await buildSharedJsonFromForm(), null, 2);
+        try {
+          await window.GitHubAPI.putFile(owner, repo, path, content, sha, token, 'chore(settings): update shared settings');
+          status('Shared settings saved to repo at config/settings.json.');
+        } catch (e) {
+          status('Failed to save shared settings. Check token permissions.');
+        }
+      }
+
+      document.getElementById('saveSharedBtn').addEventListener('click', saveShared);
+      document.getElementById('reloadSharedBtn').addEventListener('click', async ()=>{ const j = await loadShared(); if (j) fillForm(j); });
+    })();
   </script>
 </body>
 </html>

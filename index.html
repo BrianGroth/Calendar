@@ -1,91 +1,65 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Calendar</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shared Calendar</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
-  <header class="app-header" role="banner">
-    <h1 id="appTitle">Calendar</h1>
-    <nav aria-label="Primary">
-      <a class="btn" href="settings.html" aria-label="Open Settings">Settings</a>
-    </nav>
+<body class="light">
+  <header class="topbar">
+    <h1>Shared Calendar</h1>
+    <button id="settingsBtn" type="button">⚙️ Settings</button>
   </header>
 
-  <main id="main" role="main">
-    <section class="month-controls">
-      <button id="prevMonth" class="btn" aria-label="Previous month">←</button>
-      <h2 id="monthLabel" aria-live="polite"></h2>
-      <button id="nextMonth" class="btn" aria-label="Next month">→</button>
-    </section>
+  <main id="monthsContainer" aria-label="Calendar" class="calendar"></main>
+  <div id="status" aria-live="polite" class="status"></div>
 
-    <section class="holiday-toggles" aria-label="Holiday overlays">
-      <label><input type="checkbox" id="toggleUS" /> US</label>
-      <label><input type="checkbox" id="toggleUK" /> UK</label>
-      <label><input type="checkbox" id="toggleNL" /> NL</label>
-      <button id="reloadOverlays" class="btn btn-secondary">Reload</button>
-    </section>
-
-    <section id="calendar" class="calendar" aria-label="Monthly calendar" role="grid" aria-readonly="false">
-      <!-- Grid injected by app.js -->
-    </section>
-  </main>
-
-  <!-- Add/Edit Modal -->
-  <dialog id="eventModal" aria-labelledby="eventModalTitle">
-    <form method="dialog" id="eventForm">
-      <h3 id="eventModalTitle">Add Event</h3>
+  <!-- Event Modal -->
+  <dialog id="eventModal" class="event-modal">
+    <form method="dialog" class="event-form">
+      <input type="hidden" id="eventId" />
 
       <label>
         Title
-        <input id="evtTitle" name="title" type="text" required />
+        <input type="text" id="eventTitle" required />
       </label>
-
-      <div class="row">
-        <label>
-          Date
-          <input id="evtDate" name="date" type="date" required />
-        </label>
-        <label>
-          Start (24h)
-          <input id="evtStart" name="startTime" type="time" />
-        </label>
-        <label>
-          End (24h)
-          <input id="evtEnd" name="endTime" type="time" />
-        </label>
-      </div>
-
       <label>
-        URL (TripIt or other)
-        <input id="evtUrl" name="url" type="url" placeholder="https://..." />
+        Date
+        <input type="date" id="eventDate" required />
       </label>
-
+      <label>
+        Start Time
+        <input type="time" id="eventStart" />
+      </label>
+      <label>
+        End Time
+        <input type="time" id="eventEnd" />
+      </label>
       <label>
         Notes
-        <textarea id="evtNotes" name="notes" rows="3"></textarea>
+        <textarea id="eventNotes" rows="2"></textarea>
+      </label>
+      <label>
+        URL (TripIt or other)
+        <input type="url" id="eventUrl" placeholder="https://..." />
       </label>
 
-      <menu>
-        <button id="deleteBtn" class="btn danger" value="delete" type="button">Delete</button>
-        <button class="btn btn-secondary" value="cancel">Cancel</button>
-        <button class="btn" id="saveBtn" value="default">Save</button>
-      </menu>
-      <input type="hidden" id="evtId" name="id" />
+      <div class="buttons">
+        <button type="button" id="saveEventBtn">Save</button>
+        <button type="button" id="deleteEventBtn">Delete</button>
+        <button type="button" id="cancelEventBtn">Cancel</button>
+      </div>
     </form>
   </dialog>
 
-  <footer class="statusbar" role="status" aria-live="polite" id="statusBar"></footer>
-
-  <script type="module">
-    import { getSettings } from './lib/github.js';
-    import { initCalendarApp } from './app.js';
-
-    // Basic boot
-    const settings = getSettings();
-    initCalendarApp(settings);
+  <script src="lib/github.js"></script>
+  <script src="lib/ics.js"></script>
+  <script src="app.js"></script>
+  <script>
+    document.getElementById('settingsBtn').addEventListener('click', () => {
+      window.location.href = 'settings.html';
+    });
   </script>
 </body>
 </html>
