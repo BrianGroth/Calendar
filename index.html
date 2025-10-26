@@ -1,102 +1,86 @@
 <!DOCTYPE html>
 <html lang="en">
-<!-- Keep existing head section unchanged -->
 <head>
-  <!-- ... existing head content ... -->
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shared Calendar</title>
+  <!--
+    This is the main entry point for the calendar application.  It loads the
+    application styles and scripts along with a locally shipped copy of
+    date‑fns.  The calendar defaults to a monthly view with weeks starting on
+    Monday and uses 24‑hour time.  A global header shows the current month
+    along with holiday toggles.  Users can add, edit and delete events by
+    interacting with the calendar cells.  There are no recurring events;
+    everything is stored in month‑scoped JSON files (see data/ directory).
+  -->
+  <link rel="stylesheet" href="styles.css">
+  <!-- vendor/date‑fns.min.js exposes a global `dateFns` object -->
+  <script src="vendor/date-fns.min.js"></script>
+  <!-- minimal iCalendar parser -->
+  <script src="lib/ics.js"></script>
+  <!-- GitHub API helper -->
+  <script src="lib/github.js"></script>
+  <!-- main application logic (deferred to ensure DOM is ready) -->
+  <script src="app.js" defer></script>
 </head>
 <body>
-  <div id="calendar"></div>
+  <header class="app-header">
+    <div class="header-row">
+      <button id="settingsButton" class="icon-button" aria-label="Open settings">⚙️</button>
+      <div class="month-navigation">
+        <button id="prevMonth" class="nav-button" aria-label="Previous month">‹</button>
+        <h1 id="monthTitle" aria-live="polite">Loading…</h1>
+        <button id="nextMonth" class="nav-button" aria-label="Next month">›</button>
+      </div>
+      <div class="holiday-toggles" aria-label="Holiday overlays">
+        <label><input type="checkbox" id="toggleHolidayUS"> US</label>
+        <label><input type="checkbox" id="toggleHolidayUK"> UK</label>
+        <label><input type="checkbox" id="toggleHolidayNL"> NL</label>
+      </div>
+    </div>
+  </header>
+  <main id="calendarContainer" tabindex="0"></main>
 
-  <script>
-    // Keep existing constants and helper functions unchanged until renderInitial()
+  <!-- Modal dialog for adding/editing events -->
+  <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" aria-hidden="true">
+    <div class="modal-content">
+      <h2 id="modalTitle">Add Event</h2>
+      <form id="eventForm">
+        <input type="hidden" id="eventId" name="id">
+        <label>
+          Title
+          <input type="text" id="eventTitle" name="title" required>
+        </label>
+        <label>
+          Date
+          <input type="date" id="eventDate" name="date" required>
+        </label>
+        <label>
+          Start time
+          <input type="time" id="eventStart" name="startTime" required>
+        </label>
+        <label>
+          End time
+          <input type="time" id="eventEnd" name="endTime" required>
+        </label>
+        <label>
+          Notes
+          <textarea id="eventNotes" name="notes" rows="3"></textarea>
+        </label>
+        <label>
+          URL
+          <input type="url" id="eventUrl" name="url" placeholder="https://">
+        </label>
+        <div class="modal-actions">
+          <button type="submit" id="saveEvent">Save</button>
+          <button type="button" id="deleteEvent" class="danger" hidden>Delete</button>
+          <button type="button" id="cancelEvent">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
-    // Modify the renderInitial function to pre-load more months
-    function renderInitial() {
-      // Pre-render several months ahead
-      for (let i = 0; i < 6; i++) { // Pre-load 6 months
-        let monthToRender = currentMonth + i;
-        let yearToRender = currentYear;
-        
-        while (monthToRender > 11) {
-          monthToRender -= 12;
-          yearToRender++;
-        }
-        
-        if (yearToRender <= maxYear) {
-          renderMonth(yearToRender, monthToRender, "end");
-        }
-      }
-
-      // Also render one month in the past
-      let prevMonth = currentMonth - 1;
-      let prevYear = currentYear;
-      if (prevMonth < 0) {
-        prevMonth = 11;
-        prevYear--;
-      }
-      if (prevYear >= minYear) {
-        renderMonth(prevYear, prevMonth, "start");
-      }
-    }
-
-    // Modify the scroll handler to be more proactive
-    function handleScroll() {
-      const scrollY = window.scrollY;
-      const viewportHeight = window.innerHeight;
-      const totalHeight = document.body.scrollHeight;
-
-      // Load future months when user is approaching the top
-      if (scrollY < viewportHeight) { // Increased threshold
-        let nextMonth = currentMonth + 1;
-        let nextYear = currentYear;
-        if (nextMonth > 11) {
-          nextMonth = 0;
-          nextYear++;
-        }
-
-        if (nextYear < maxYear || (nextYear === maxYear && nextMonth <= maxMonth)) {
-          currentMonth = nextMonth;
-          currentYear = nextYear;
-          requestAnimationFrame(() => {
-            const oldHeight = document.body.scrollHeight;
-            renderMonth(currentYear, currentMonth, "start");
-            const heightDiff = document.body.scrollHeight - oldHeight;
-            window.scrollBy(0, heightDiff); // Smoother scroll adjustment
-          });
-        }
-      }
-
-      // Load past months when approaching bottom
-      if (scrollY + viewportHeight > totalHeight - viewportHeight) {
-        let prevMonth = currentMonth - 1;
-        let prevYear = currentYear;
-        if (prevMonth < 0) {
-          prevMonth = 11;
-          prevYear--;
-        }
-
-        if (prevYear > minYear || (prevYear === minYear && prevMonth >= minMonth)) {
-          currentMonth = prevMonth;
-          currentYear = prevYear;
-          renderMonth(currentYear, currentMonth, "end");
-        }
-      }
-    }
-
-    // Add throttling to prevent too frequent scroll handling
-    function throttle(func, limit) {
-      let inThrottle;
-      return function(...args) {
-        if (!inThrottle) {
-          func.apply(this, args);
-          inThrottle = true;
-          setTimeout(() => inThrottle = false, limit);
-        }
-      }
-    }
-
-    renderInitial();
-    window.addEventListener("scroll", throttle(handleScroll, 150));
-  </script>
+  <!-- Settings overlay (separate page) link is defined in settings.html) -->
 </body>
 </html>

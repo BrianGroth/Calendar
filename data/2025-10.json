@@ -1,0 +1,20 @@
+[
+  {
+    "id": "sample-event-1",
+    "title": "Doctor Appointment",
+    "date": "2025-10-05",
+    "startTime": "14:00",
+    "endTime": "15:00",
+    "notes": "Annual checkup",
+    "url": "https://example.com/appointment"
+  },
+  {
+    "id": "sample-event-2",
+    "title": "Team Meeting",
+    "date": "2025-10-12",
+    "startTime": "09:30",
+    "endTime": "10:30",
+    "notes": "Project planning",
+    "url": ""
+  }
+]
