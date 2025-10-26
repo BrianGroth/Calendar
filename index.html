@@ -1,86 +1,65 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Shared Calendar</title>
-  <!--
-    This is the main entry point for the calendar application.  It loads the
-    application styles and scripts along with a locally shipped copy of
-    date‑fns.  The calendar defaults to a monthly view with weeks starting on
-    Monday and uses 24‑hour time.  A global header shows the current month
-    along with holiday toggles.  Users can add, edit and delete events by
-    interacting with the calendar cells.  There are no recurring events;
-    everything is stored in month‑scoped JSON files (see data/ directory).
-  -->
-  <link rel="stylesheet" href="styles.css">
-  <!-- vendor/date‑fns.min.js exposes a global `dateFns` object -->
-  <script src="vendor/date-fns.min.js"></script>
-  <!-- minimal iCalendar parser -->
-  <script src="lib/ics.js"></script>
-  <!-- GitHub API helper -->
-  <script src="lib/github.js"></script>
-  <!-- main application logic (deferred to ensure DOM is ready) -->
-  <script src="app.js" defer></script>
+  <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
-  <header class="app-header">
-    <div class="header-row">
-      <button id="settingsButton" class="icon-button" aria-label="Open settings">⚙️</button>
-      <div class="month-navigation">
-        <button id="prevMonth" class="nav-button" aria-label="Previous month">‹</button>
-        <h1 id="monthTitle" aria-live="polite">Loading…</h1>
-        <button id="nextMonth" class="nav-button" aria-label="Next month">›</button>
-      </div>
-      <div class="holiday-toggles" aria-label="Holiday overlays">
-        <label><input type="checkbox" id="toggleHolidayUS"> US</label>
-        <label><input type="checkbox" id="toggleHolidayUK"> UK</label>
-        <label><input type="checkbox" id="toggleHolidayNL"> NL</label>
-      </div>
-    </div>
+<body class="light">
+  <header class="topbar">
+    <h1>Shared Calendar</h1>
+    <button id="settingsBtn" type="button">⚙️ Settings</button>
   </header>
-  <main id="calendarContainer" tabindex="0"></main>
 
-  <!-- Modal dialog for adding/editing events -->
-  <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" aria-hidden="true">
-    <div class="modal-content">
-      <h2 id="modalTitle">Add Event</h2>
-      <form id="eventForm">
-        <input type="hidden" id="eventId" name="id">
-        <label>
-          Title
-          <input type="text" id="eventTitle" name="title" required>
-        </label>
-        <label>
-          Date
-          <input type="date" id="eventDate" name="date" required>
-        </label>
-        <label>
-          Start time
-          <input type="time" id="eventStart" name="startTime" required>
-        </label>
-        <label>
-          End time
-          <input type="time" id="eventEnd" name="endTime" required>
-        </label>
-        <label>
-          Notes
-          <textarea id="eventNotes" name="notes" rows="3"></textarea>
-        </label>
-        <label>
-          URL
-          <input type="url" id="eventUrl" name="url" placeholder="https://">
-        </label>
-        <div class="modal-actions">
-          <button type="submit" id="saveEvent">Save</button>
-          <button type="button" id="deleteEvent" class="danger" hidden>Delete</button>
-          <button type="button" id="cancelEvent">Cancel</button>
-        </div>
-      </form>
-    </div>
-  </div>
+  <main id="monthsContainer" aria-label="Calendar" class="calendar"></main>
+  <div id="status" aria-live="polite" class="status"></div>
 
-  <!-- Settings overlay (separate page) link is defined in settings.html) -->
+  <!-- Event Modal -->
+  <dialog id="eventModal" class="event-modal">
+    <form method="dialog" class="event-form">
+      <input type="hidden" id="eventId" />
+
+      <label>
+        Title
+        <input type="text" id="eventTitle" required />
+      </label>
+      <label>
+        Date
+        <input type="date" id="eventDate" required />
+      </label>
+      <label>
+        Start Time
+        <input type="time" id="eventStart" />
+      </label>
+      <label>
+        End Time
+        <input type="time" id="eventEnd" />
+      </label>
+      <label>
+        Notes
+        <textarea id="eventNotes" rows="2"></textarea>
+      </label>
+      <label>
+        URL (TripIt or other)
+        <input type="url" id="eventUrl" placeholder="https://..." />
+      </label>
+
+      <div class="buttons">
+        <button type="button" id="saveEventBtn">Save</button>
+        <button type="button" id="deleteEventBtn">Delete</button>
+        <button type="button" id="cancelEventBtn">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="lib/github.js"></script>
+  <script src="lib/ics.js"></script>
+  <script src="app.js"></script>
+  <script>
+    document.getElementById('settingsBtn').addEventListener('click', () => {
+      window.location.href = 'settings.html';
+    });
+  </script>
 </body>
 </html>
