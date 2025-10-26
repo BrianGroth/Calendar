@@ -114,15 +114,15 @@
 
       // Build robust candidate URLs for config/settings.json, then try each until one succeeds.
       function candidateConfigUrls(){
-        const parts = location.pathname.split('/').filter(Boolean);
-        const repo = parts.length ? parts[0] : '';
-        const candidates = [
-          './config/settings.json',
-          '/config/settings.json',
-          repo ? `/${repo}/config/settings.json` : null
-        ].filter(Boolean);
-        return candidates;
-      }
+  const parts = location.pathname.split('/').filter(Boolean);
+  const repo = parts.length ? parts[0] : '';  // choose first segment (“Calendar”)
+  const candidates = [
+    './config/settings.json',
+    '/config/settings.json',
+    repo ? `/${repo}/config/settings.json` : null  // correct fallback path
+  ].filter(Boolean);
+  return candidates;
+}
 
       async function fetchFirstAvailable(urls){
         for (const u of urls){
