@@ -17,7 +17,7 @@
   <main class="settings">
     <section class="card">
       <h2>GitHub Repository</h2>
-      <p class="hint">Your Personal Access Token (PAT) can be used to commit settings and save events. It is stored locally unless you put it in settings.json (not recommended).</p>
+      <p class="hint">PAT is used for committing settings and saving events. It's stored locally unless you put it in the repo (not recommended).</p>
       <div class="grid">
         <label>
           Owner (username)
@@ -87,11 +87,12 @@
         </label>
       </div>
       <div class="actions">
+        <button id="reloadSharedBtn" type="button">Reload Shared (read config/settings.json)</button>
         <button id="saveBtn" type="button">Save (Local)</button>
         <button id="saveSharedBtn" type="button">Save Shared (commit to repo)</button>
         <button id="clearBtn" type="button">Clear Local Settings</button>
       </div>
-      <p class="hint">Local saves go to your browser. "Save Shared" writes <code>config/settings.json</code> in the repo.</p>
+      <p class="hint">Local saves go to your browser. "Save Shared" writes <code>config/settings.json</code> in the repo. Make sure the path is exactly <code>config/settings.json</code> (all lowercase).</p>
     </section>
   </main>
 
@@ -107,25 +108,60 @@
         tripitIcalUrl: '', holidays: { usUrl:'', ukUrl:'', nlUrl:'' }
       };
 
-      function load(){ try{ const j=localStorage.getItem(KEY); return j? JSON.parse(j) : { ...defaults }; } catch{ return { ...defaults }; } }
-      function save(s){ localStorage.setItem(KEY, JSON.stringify(s)); }
+      function loadLocal(){ try{ const j=localStorage.getItem(KEY); return j? JSON.parse(j) : { ...defaults }; } catch{ return { ...defaults }; } }
+      function saveLocal(s){ localStorage.setItem(KEY, JSON.stringify(s)); }
       function status(msg){ const el=document.getElementById('status'); if(el) el.textContent=msg; }
 
-      const s = load();
+      async function loadShared(){
+        // If opened as file:// the fetch will be blocked — remind user
+        if (location.protocol === 'file:') {
+          status('Open this page via your GitHub Pages URL (https://.../settings.html), not file://');
+        }
+        try {
+          const res = await fetch('config/settings.json', { cache: 'no-store' });
+          if (!res.ok) { status('Could not read config/settings.json (HTTP '+res.status+').'); return null; }
+          const json = await res.json();
+          status('Loaded shared settings from config/settings.json');
+          return json;
+        } catch (e) {
+          status('Failed to fetch config/settings.json. Check path/case and that it exists.');
+          return null;
+        }
+      }
+
+      function fillForm(from){
+        if (!from) return;
+        const $ = (id)=> document.getElementById(id);
+        const { preferences = {}, holidays = {}, repo = {}, integrations = {} } = from;
+        if (repo.owner) $('#owner').value = repo.owner;
+        if (repo.name)  $('#repo').value  = repo.name;
+        if (holidays.usUrl) $('#hol_us').value = holidays.usUrl;
+        if (holidays.ukUrl) $('#hol_uk').value = holidays.ukUrl;
+        if (holidays.nlUrl) $('#hol_nl').value = holidays.nlUrl;
+        if (integrations.tripitIcalUrl) $('#tripit').value = integrations.tripitIcalUrl;
+        if (preferences.theme) $('#theme').value = preferences.theme;
+        if (typeof preferences.weekStart === 'number') $('#weekStart').value = String(preferences.weekStart);
+        if (typeof preferences.timeFormat24h === 'boolean') $('#timeFormat').value = preferences.timeFormat24h ? '24' : '12';
+        if (preferences.timezone) $('#timezone').value = preferences.timezone;
+      }
+
+      // --- Init form: load local first, then overlay shared ---
+      const s = loadLocal();
       const $ = (id) => document.getElementById(id);
       $('#owner').value = s.owner || '';
       $('#repo').value = s.repo || 'Calendar';
       $('#token').value = s.token || '';
-
       $('#tripit').value = s.tripitIcalUrl || '';
       $('#hol_us').value = (s.holidays && s.holidays.usUrl) || '';
       $('#hol_uk').value = (s.holidays && s.holidays.ukUrl) || '';
       $('#hol_nl').value = (s.holidays && s.holidays.nlUrl) || '';
-
       $('#theme').value = s.theme || 'light';
       $('#weekStart').value = String(s.weekStart ?? 1);
       $('#timeFormat').value = s.timeFormat24h ? '24' : '12';
       $('#timezone').value = s.timezone || 'Europe/Amsterdam';
+
+      // Now overlay shared file values if available
+      loadShared().then(json => { if (json) fillForm(json); });
 
       // Local save
       $('#saveBtn').addEventListener('click', () => {
@@ -144,7 +180,7 @@
             nlUrl: $('#hol_nl').value.trim()
           }
         };
-        save(next);
+        saveLocal(next);
         status('Settings saved locally.');
       });
 
@@ -155,7 +191,7 @@
         setTimeout(() => window.location.reload(), 600);
       });
 
-      // --- Save Shared (commit config/settings.json) ---
+      // Save Shared (commit config/settings.json)
       async function buildSharedJsonFromForm(){
         return {
           preferences: {
@@ -198,8 +234,8 @@
         }
       }
 
-      const sharedBtn = document.getElementById('saveSharedBtn');
-      if (sharedBtn) sharedBtn.addEventListener('click', saveShared);
+      document.getElementById('saveSharedBtn').addEventListener('click', saveShared);
+      document.getElementById('reloadSharedBtn').addEventListener('click', async ()=>{ const j = await loadShared(); if (j) fillForm(j); });
     })();
   </script>
 </body>
