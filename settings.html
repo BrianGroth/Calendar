@@ -118,7 +118,12 @@
           status('Open this page via your GitHub Pages URL (https://.../settings.html), not file://');
         }
         try {
-          const res = await fetch('config/settings.json', { cache: 'no-store' });
+          const url = new URL('./config/settings.json', location.href);
+// cache-bust to avoid old versions
+url.searchParams.set('v', Date.now());
+
+const res = await fetch(url.toString(), { cache: 'no-store' });
+
           if (!res.ok) { status('Could not read config/settings.json (HTTP '+res.status+').'); return null; }
           const json = await res.json();
           status('Loaded shared settings from config/settings.json');
