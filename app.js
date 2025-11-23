@@ -1,10 +1,10 @@
 /*
-  Calendar App — app.js (v7)
-  - Loads shared config from config/settings.json (preferences, holidays, repo, integrations.tripitIcalUrl)
+  Calendar App — app.js (v8)
+  - Loads shared config from config/settings.json (preferences, holidays, repo)
   - Merges with local settings (keeps PAT local)
-  - Trips overlay button uses shared TripIt URL by default
   - Infinite scrolling with virtualization (keeps ~12 months in DOM)
   - Weekday headers aligned as the first row of the grid
+  - TripIt integration removed
 */
 
 ; (() => {
@@ -24,7 +24,6 @@
     weekStart: 1,
     timezone: DEFAULT_TZ,
     theme: 'light',
-    tripitIcalUrl: '', // can be set by shared file integrations.tripitIcalUrl or local
     holidays: { usUrl: '', ukUrl: '', nlUrl: '' }
   };
 
@@ -79,7 +78,7 @@
   };
 
   // ---------------------------
-  // Overlays (TripIt + Holidays)
+  // Overlays (Holidays)
   // ---------------------------
   const OverlayCache = new Map();
   async function fetchICS(url) { const r = await fetch(url, { cache: 'no-store' }); if (!r.ok) throw new Error('ICS fetch ' + r.status); const txt = await r.text(); return window.ICS.parseICS(txt); }
@@ -113,7 +112,7 @@
       // Fetch shared settings and merge
       loadSharedSettings().then(shared => {
         if (!shared) return;
-        const { preferences = {}, holidays = {}, repo = {}, integrations = {} } = shared;
+        const { preferences = {}, holidays = {}, repo = {} } = shared;
         this.settings.owner = repo.owner || this.settings.owner || '';
         this.settings.repo = repo.name || this.settings.repo || 'Calendar';
         this.settings.timeFormat24h = preferences.timeFormat24h ?? this.settings.timeFormat24h;
@@ -121,9 +120,7 @@
         this.settings.timezone = preferences.timezone ?? this.settings.timezone;
         this.settings.theme = preferences.theme ?? this.settings.theme;
         this.settings.holidays = { ...this.settings.holidays, ...holidays };
-        if (integrations.tripitIcalUrl) {
-          this.settings.tripitIcalUrl = integrations.tripitIcalUrl;
-        }
+
         // re-render visible months to apply changes
         this.monthNodes.forEach(section => {
           const grid = section.querySelector('.month-grid');
@@ -139,10 +136,11 @@
       const top = document.createElement('div'); top.id = 'topSentinel'; top.style.height = '1px'; this.root.prepend(top);
       const bottom = document.createElement('div'); bottom.id = 'bottomSentinel'; bottom.style.height = '1px'; this.root.appendChild(bottom);
 
-      const ioTop = new IntersectionObserver(es => { es.forEach(e => { if (!e.isIntersecting) return; const firstKey = this.monthNodes[0]?.dataset?.monthKey || fmtMonthKey(this.current); const [y, m] = firstKey.split('-').map(Number); const prev = new Date(y, (m - 1) - 1, 1); this.ensureMonth(prev, 'prepend'); }); }, { root: null, rootMargin: '500px', threshold: 0 });
+      // Increased rootMargin to 2000px for earlier loading
+      const ioTop = new IntersectionObserver(es => { es.forEach(e => { if (!e.isIntersecting) return; const firstKey = this.monthNodes[0]?.dataset?.monthKey || fmtMonthKey(this.current); const [y, m] = firstKey.split('-').map(Number); const prev = new Date(y, (m - 1) - 1, 1); this.ensureMonth(prev, 'prepend'); }); }, { root: null, rootMargin: '2000px', threshold: 0 });
       ioTop.observe(top);
 
-      const ioBottom = new IntersectionObserver(es => { es.forEach(e => { if (!e.isIntersecting) return; const lastKey = this.monthNodes[this.monthNodes.length - 1]?.dataset?.monthKey || fmtMonthKey(this.current); const [y, m] = lastKey.split('-').map(Number); const base = new Date(y, m - 1, 1); base.setMonth(base.getMonth() + 1); if (base > this.maxFuture) return; this.ensureMonth(base, 'append'); }); }, { root: null, rootMargin: '500px', threshold: 0 });
+      const ioBottom = new IntersectionObserver(es => { es.forEach(e => { if (!e.isIntersecting) return; const lastKey = this.monthNodes[this.monthNodes.length - 1]?.dataset?.monthKey || fmtMonthKey(this.current); const [y, m] = lastKey.split('-').map(Number); const base = new Date(y, m - 1, 1); base.setMonth(base.getMonth() + 1); if (base > this.maxFuture) return; this.ensureMonth(base, 'append'); }); }, { root: null, rootMargin: '2000px', threshold: 0 });
       ioBottom.observe(bottom);
     }
 
@@ -211,7 +209,6 @@
 
       const toggles = document.createElement('div'); toggles.className = 'holiday-toggles';
       const mkBtn = (label, key) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'holiday-toggle'; b.dataset.country = key; b.setAttribute('aria-pressed', 'false'); b.textContent = label; b.addEventListener('click', () => this.toggleOverlay(key, date, wrap, b)); return b; };
-      toggles.appendChild(mkBtn('Trips', 'tripit'));
       toggles.appendChild(mkBtn('US', 'us'));
       toggles.appendChild(mkBtn('UK', 'uk'));
       toggles.appendChild(mkBtn('NL', 'nl'));
@@ -228,7 +225,6 @@
 
     async precacheOverlays(d) {
       const s = this.settings; const t = [];
-      if (s.tripitIcalUrl) t.push(getOverlay('tripit', s.tripitIcalUrl, d));
       if (s.holidays.usUrl) t.push(getOverlay('us', s.holidays.usUrl, d));
       if (s.holidays.ukUrl) t.push(getOverlay('uk', s.holidays.ukUrl, d));
       if (s.holidays.nlUrl) t.push(getOverlay('nl', s.holidays.nlUrl, d));
@@ -238,7 +234,7 @@
     async toggleOverlay(key, date, section, btn) {
       const pressed = btn.getAttribute('aria-pressed') === 'true';
       btn.setAttribute('aria-pressed', String(!pressed));
-      const urls = { tripit: this.settings.tripitIcalUrl, us: this.settings.holidays.usUrl, uk: this.settings.holidays.ukUrl, nl: this.settings.holidays.nlUrl };
+      const urls = { us: this.settings.holidays.usUrl, uk: this.settings.holidays.ukUrl, nl: this.settings.holidays.nlUrl };
       const url = urls[key];
       if (!url) { announceStatus(`${key === 'tripit' ? 'TripIt' : 'Holiday'} URL not configured.`); }
       const grid = section.querySelector('.month-grid'); if (!grid) return;
@@ -305,7 +301,7 @@
       let base = this.collectBaseEvents(section); const idx = base.findIndex(x => x.id === ev.id); if (idx >= 0) base[idx] = ev; else base.push(ev);
       try {
         const y = Number(key.slice(0, 4)), m = Number(key.slice(5, 7)); const res = await GH.saveMonth(this.settings, y, m, base, section.dataset.sha || null); section.dataset.sha = res?.content?.sha || res?.sha || section.dataset.sha || ''; section.__events = base; announceStatus(`Saved to data/${key}.json`);
-        const grid = section.querySelector('.month-grid'); const active = Array.from(section.querySelectorAll('.holiday-toggle[aria-pressed="true"]')).map(b => b.dataset.country); let combo = base.slice(); for (const cc of active) { const urls = { tripit: this.settings.tripitIcalUrl, us: this.settings.holidays.usUrl, uk: this.settings.holidays.ukUrl, nl: this.settings.holidays.nlUrl }; const u = urls[cc]; if (u) { const evts = await getOverlay(cc, u, parseISODate(key + '-01')); combo = combo.concat(evts); } } await this.renderGrid(parseISODate(key + '-01'), grid, combo);
+        const grid = section.querySelector('.month-grid'); const active = Array.from(section.querySelectorAll('.holiday-toggle[aria-pressed="true"]')).map(b => b.dataset.country); let combo = base.slice(); for (const cc of active) { const urls = { us: this.settings.holidays.usUrl, uk: this.settings.holidays.ukUrl, nl: this.settings.holidays.nlUrl }; const u = urls[cc]; if (u) { const evts = await getOverlay(cc, u, parseISODate(key + '-01')); combo = combo.concat(evts); } } await this.renderGrid(parseISODate(key + '-01'), grid, combo);
       } catch (e) { consoleWarn('save fail', e); announceStatus('Save failed. Check token permissions and network.'); }
       this.closeModal();
     }
