@@ -1,15 +1,16 @@
 /*
-  Calendar App — app.js (v6)
+  Calendar App — app.js (v7)
   - Loads shared config from config/settings.json (preferences, holidays, repo, integrations.tripitIcalUrl)
   - Merges with local settings (keeps PAT local)
   - Trips overlay button uses shared TripIt URL by default
-  - 2‑year future scrolling (current + 24 months), fixed month math
+  - Infinite scrolling with virtualization (keeps ~12 months in DOM)
   - Weekday headers aligned as the first row of the grid
 */
 
 ;(() => {
   const DEFAULT_TZ = 'Europe/Amsterdam';
   const STATUS_EL = () => document.getElementById('status');
+  const MAX_RENDERED_MONTHS = 12; // Keep ~1 year in DOM
 
   // ---------------------------
   // Settings
@@ -102,7 +103,8 @@
       this.root.classList.add('calendar-scroll');
 
       this.loadedKeys=new Set(); this.monthNodes=[]; this.current=new Date();
-      this.maxFuture=addMonths(this.current, 24);
+      // Allow infinite future scrolling, but we'll only render a window
+      this.maxFuture=addMonths(this.current, 60); // 5 years
 
       this.observeSentinels();
       this.renderInitial();
@@ -137,26 +139,67 @@
       const top=document.createElement('div'); top.id='topSentinel'; top.style.height='1px'; this.root.prepend(top);
       const bottom=document.createElement('div'); bottom.id='bottomSentinel'; bottom.style.height='1px'; this.root.appendChild(bottom);
 
-      const ioTop=new IntersectionObserver(es=>{ es.forEach(e=>{ if(!e.isIntersecting) return; const firstKey=this.monthNodes[0]?.dataset?.monthKey||fmtMonthKey(this.current); const [y,m]=firstKey.split('-').map(Number); const prev=new Date(y, (m-1)-1, 1); this.ensureMonth(prev); }); }, {root:this.root, threshold:0.9});
+      const ioTop=new IntersectionObserver(es=>{ es.forEach(e=>{ if(!e.isIntersecting) return; const firstKey=this.monthNodes[0]?.dataset?.monthKey||fmtMonthKey(this.current); const [y,m]=firstKey.split('-').map(Number); const prev=new Date(y, (m-1)-1, 1); this.ensureMonth(prev, 'prepend'); }); }, {root:null, rootMargin:'500px', threshold:0});
       ioTop.observe(top);
 
-      const ioBottom=new IntersectionObserver(es=>{ es.forEach(e=>{ if(!e.isIntersecting) return; const lastKey=this.monthNodes[this.monthNodes.length-1]?.dataset?.monthKey||fmtMonthKey(this.current); const [y,m]=lastKey.split('-').map(Number); const base=new Date(y, m-1, 1); base.setMonth(base.getMonth()+1); if(base>this.maxFuture) return; this.ensureMonth(base); }); }, {root:this.root, threshold:0.9});
+      const ioBottom=new IntersectionObserver(es=>{ es.forEach(e=>{ if(!e.isIntersecting) return; const lastKey=this.monthNodes[this.monthNodes.length-1]?.dataset?.monthKey||fmtMonthKey(this.current); const [y,m]=lastKey.split('-').map(Number); const base=new Date(y, m-1, 1); base.setMonth(base.getMonth()+1); if(base>this.maxFuture) return; this.ensureMonth(base, 'append'); }); }, {root:null, rootMargin:'500px', threshold:0});
       ioBottom.observe(bottom);
     }
 
     async renderInitial(){
       const now=new Date();
-      await this.ensureMonth(new Date(now.getFullYear(), now.getMonth(), 1));
-      await this.ensureMonth(new Date(now.getFullYear(), now.getMonth()-1, 1));
-      const base=new Date(now.getFullYear(), now.getMonth(), 1); base.setMonth(base.getMonth()+1); if(base<=this.maxFuture) await this.ensureMonth(base);
+      // Render a few months around now
+      await this.ensureMonth(new Date(now.getFullYear(), now.getMonth(), 1), 'append');
+      await this.ensureMonth(new Date(now.getFullYear(), now.getMonth()+1, 1), 'append');
+      await this.ensureMonth(new Date(now.getFullYear(), now.getMonth()-1, 1), 'prepend');
     }
 
-    async ensureMonth(d){
-      const key=fmtMonthKey(d); if(this.loadedKeys.has(key)) return; this.loadedKeys.add(key);
+    async ensureMonth(d, position='append'){
+      const key=fmtMonthKey(d); if(this.loadedKeys.has(key)) return;
+      this.loadedKeys.add(key);
+
       const section=await this.renderMonthSection(d);
-      const insertBefore=this.monthNodes.find(n=> n.dataset.monthKey>key);
-      if(insertBefore){ this.root.insertBefore(section, insertBefore); this.monthNodes.splice(this.monthNodes.indexOf(insertBefore),0,section); }
-      else { this.root.appendChild(section); this.monthNodes.push(section); }
+      
+      if(position === 'prepend') {
+        // Prepend after topSentinel
+        const firstMonth = this.monthNodes[0];
+        if(firstMonth) {
+            this.root.insertBefore(section, firstMonth);
+            this.monthNodes.unshift(section);
+        } else {
+             // Should not happen if initialized correctly, but fallback
+             const bottom = document.getElementById('bottomSentinel');
+             this.root.insertBefore(section, bottom);
+             this.monthNodes.push(section);
+        }
+      } else {
+        // Append before bottomSentinel
+        const bottom = document.getElementById('bottomSentinel');
+        this.root.insertBefore(section, bottom);
+        this.monthNodes.push(section);
+      }
+
+      this.pruneMonths(position);
+    }
+
+    pruneMonths(addedPosition){
+        if (this.monthNodes.length <= MAX_RENDERED_MONTHS) return;
+
+        if (addedPosition === 'append') {
+            // We added to bottom, remove from top
+            const toRemove = this.monthNodes.shift();
+            if (toRemove) {
+                toRemove.remove();
+                this.loadedKeys.delete(toRemove.dataset.monthKey);
+            }
+        } else if (addedPosition === 'prepend') {
+            // We added to top, remove from bottom
+            const toRemove = this.monthNodes.pop();
+            if (toRemove) {
+                toRemove.remove();
+                this.loadedKeys.delete(toRemove.dataset.monthKey);
+            }
+        }
     }
 
     async renderMonthSection(date){
@@ -204,9 +247,11 @@
     }
 
     async renderGrid(date, grid, events){
-      grid.innerHTML='';
+      // Use DocumentFragment for batch insertion
+      const frag = document.createDocumentFragment();
+      
       // Weekday header row (aligned to columns)
-      ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(n=>{ const h=document.createElement('div'); h.className='weekday'; h.textContent=n; grid.appendChild(h); });
+      ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(n=>{ const h=document.createElement('div'); h.className='weekday'; h.textContent=n; frag.appendChild(h); });
 
       const first=new Date(date.getFullYear(), date.getMonth(), 1);
       const firstWeekday=(first.getDay()+6)%7; // Monday-first
@@ -218,14 +263,16 @@
       for(let i=0;i<totalCells;i++){
         const cell=document.createElement('div'); cell.className='day-cell'; cell.setAttribute('role','gridcell');
         const dayNum=i - leading + 1;
-        if(i<leading || dayNum>daysInMonth){ cell.classList.add('outside'); grid.appendChild(cell); continue; }
+        if(i<leading || dayNum>daysInMonth){ cell.classList.add('outside'); frag.appendChild(cell); continue; }
         const cellDate=new Date(date.getFullYear(), date.getMonth(), dayNum); const iso=toISODateLocal(cellDate); cell.dataset.date=iso;
         const label=document.createElement('button'); label.type='button'; label.className='day-label'; label.textContent=String(dayNum); label.setAttribute('aria-label',`Add or view events for ${iso}`); label.addEventListener('click',()=> this.openEventModal({date:iso})); cell.appendChild(label);
         if(iso===todayISO) cell.classList.add('today');
         const list=document.createElement('ul'); list.className='event-list';
         events.filter(e=> e.date===iso).forEach(ev=>{ const li=document.createElement('li'); li.className='event-item' + (ev.__overlay?' overlay':''); const btn=document.createElement('button'); btn.type='button'; btn.className='event-btn'; const prefix=ev.startTime? `${ev.startTime} `:''; btn.textContent=`${prefix}${ev.title}`; btn.title=ev.notes||''; btn.addEventListener('click',()=>{ if(ev.__overlay && ev.url){ window.open(ev.url,'_blank'); } else { this.openEventModal(ev); } }); li.appendChild(btn); if(ev.url && ev.__overlay){ const a=document.createElement('a'); a.href=ev.url; a.target='_blank'; a.rel='noopener noreferrer'; a.className='event-link'; a.textContent='↗'; li.appendChild(a);} list.appendChild(li); });
-        cell.appendChild(list); grid.appendChild(cell);
+        cell.appendChild(list); frag.appendChild(cell);
       }
+      grid.innerHTML='';
+      grid.appendChild(frag);
     }
 
     // Modal CRUD
