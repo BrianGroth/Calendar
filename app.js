@@ -1,10 +1,8 @@
 /*
-  Calendar App — app.js (v8)
-  - Loads shared config from config/settings.json (preferences, holidays, repo)
-  - Merges with local settings (keeps PAT local)
+  Calendar App — app.js (v9)
+  - LocalStorage only (GitHub/TripIt removed)
   - Infinite scrolling with virtualization (keeps ~12 months in DOM)
   - Weekday headers aligned as the first row of the grid
-  - TripIt integration removed
 */
 
 ; (() => {
@@ -17,9 +15,6 @@
   // ---------------------------
   const SETTINGS_KEY = 'calendar.settings.v1';
   const defaultSettings = {
-    owner: '',
-    repo: 'Calendar',
-    token: '', // PAT (local only)
     timeFormat24h: true,
     weekStart: 1,
     timezone: DEFAULT_TZ,
@@ -33,14 +28,6 @@
   }
   function saveLocalSettings(s) { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); }
 
-  async function loadSharedSettings() {
-    try {
-      const res = await fetch('config/settings.json', { cache: 'no-store' });
-      if (!res.ok) return null;
-      return await res.json();
-    } catch { return null; }
-  }
-
   // ---------------------------
   // Utils
   // ---------------------------
@@ -53,27 +40,28 @@
   const parseISODate = (s) => { const [y, m, dd] = s.split('-').map(Number); return new Date(y, m - 1, dd); };
   const formatTimeHHMM = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   const announceStatus = (m) => { const el = STATUS_EL(); if (el) el.textContent = m; console.log('[status]', m); };
-  const consoleWarn = (m, e) => console.warn(m, e ? String(e).replace(/ghp_[A-Za-z0-9]+/g, '***') : '');
+  const consoleWarn = (m, e) => console.warn(m, e || '');
   const uuid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = crypto.getRandomValues(new Uint8Array(1))[0] & 15; const v = c === 'x' ? r : (r & 0x3 | 0x8); return v.toString(16); });
 
   // ---------------------------
-  // GitHub (via lib/github.js)
+  // Local Storage (Events)
   // ---------------------------
-  const GH = {
-    async loadMonth(settings, y, m) {
-      const path = `data/${y}-${pad(m)}.json`;
+  const LocalStore = {
+    getKey(y, m) { return `calendar.data.${y}-${pad(m)}`; },
+    async loadMonth(y, m) {
       try {
-        const res = await window.GitHubAPI.getFile(settings.owner, settings.repo, path, settings.token || undefined);
-        if (!res) return { events: [], sha: null };
-        const arr = JSON.parse(res.content || '[]');
-        return { events: Array.isArray(arr) ? arr : [], sha: res.sha || null };
-      } catch (e) { consoleWarn('loadMonth', e); return { events: [], sha: null }; }
+        const key = this.getKey(y, m);
+        const json = localStorage.getItem(key);
+        const events = json ? JSON.parse(json) : [];
+        return { events: Array.isArray(events) ? events : [] };
+      } catch (e) { consoleWarn('loadMonth', e); return { events: [] }; }
     },
-    async saveMonth(settings, y, m, events, sha) {
-      const path = `data/${y}-${pad(m)}.json`;
-      const body = JSON.stringify(events, null, 2);
-      const msg = `feat(events): update ${y}-${pad(m)} (${events.length} record${events.length === 1 ? '' : 's'})`;
-      return window.GitHubAPI.putFile(settings.owner, settings.repo, path, body, sha || undefined, settings.token, msg);
+    async saveMonth(y, m, events) {
+      try {
+        const key = this.getKey(y, m);
+        localStorage.setItem(key, JSON.stringify(events));
+        return true;
+      } catch (e) { consoleWarn('saveMonth', e); return false; }
     }
   };
 
@@ -108,28 +96,6 @@
       this.observeSentinels();
       this.renderInitial();
       this.bindModal();
-
-      // Fetch shared settings and merge
-      loadSharedSettings().then(shared => {
-        if (!shared) return;
-        const { preferences = {}, holidays = {}, repo = {} } = shared;
-        this.settings.owner = repo.owner || this.settings.owner || '';
-        this.settings.repo = repo.name || this.settings.repo || 'Calendar';
-        this.settings.timeFormat24h = preferences.timeFormat24h ?? this.settings.timeFormat24h;
-        this.settings.weekStart = preferences.weekStart ?? this.settings.weekStart;
-        this.settings.timezone = preferences.timezone ?? this.settings.timezone;
-        this.settings.theme = preferences.theme ?? this.settings.theme;
-        this.settings.holidays = { ...this.settings.holidays, ...holidays };
-
-        // re-render visible months to apply changes
-        this.monthNodes.forEach(section => {
-          const grid = section.querySelector('.month-grid');
-          const key = section.dataset.monthKey;
-          const date = parseISODate(key + '-01');
-          this.renderGrid(date, grid, section.__events || []);
-        });
-        announceStatus('Loaded shared settings from config/settings.json');
-      });
     }
 
     observeSentinels() {
@@ -217,7 +183,7 @@
 
       const grid = document.createElement('div'); grid.className = 'month-grid'; grid.setAttribute('role', 'grid'); grid.setAttribute('aria-readonly', 'false'); wrap.appendChild(grid);
 
-      const { events, sha } = await GH.loadMonth(this.settings, y, m); wrap.dataset.sha = sha || ''; wrap.__events = Array.isArray(events) ? events : [];
+      const { events } = await LocalStore.loadMonth(y, m); wrap.__events = Array.isArray(events) ? events : [];
       await this.renderGrid(date, grid, wrap.__events);
       this.precacheOverlays(date).catch(() => { });
       return wrap;
@@ -236,7 +202,7 @@
       btn.setAttribute('aria-pressed', String(!pressed));
       const urls = { us: this.settings.holidays.usUrl, uk: this.settings.holidays.ukUrl, nl: this.settings.holidays.nlUrl };
       const url = urls[key];
-      if (!url) { announceStatus(`${key === 'tripit' ? 'TripIt' : 'Holiday'} URL not configured.`); }
+      if (!url) { announceStatus('Holiday URL not configured.'); }
       const grid = section.querySelector('.month-grid'); if (!grid) return;
       const base = section.__events || []; const overlay = !pressed && url ? await getOverlay(key, url, date) : [];
       await this.renderGrid(date, grid, base.concat(overlay));
@@ -294,15 +260,16 @@
     collectBaseEvents(section) { return Array.isArray(section.__events) ? section.__events.filter(e => !e.__overlay) : []; }
 
     async onSaveEvent() {
-      const s = this.settings; if (!s.token || !s.owner || !s.repo) { announceStatus('Configure Owner/Repo and paste your GitHub token in Settings first.'); return; }
       const key = this.editingMonthKey; const section = this.findSectionByKey(key); if (!section) return;
       const ev = { id: this.f.id.value || uuid(), title: this.f.title.value.trim(), date: this.f.date.value, startTime: this.f.start.value, endTime: this.f.end.value, notes: this.f.notes.value, url: this.f.url.value };
       if (!ev.title || !ev.date) { announceStatus('Title and date are required.'); return; }
       let base = this.collectBaseEvents(section); const idx = base.findIndex(x => x.id === ev.id); if (idx >= 0) base[idx] = ev; else base.push(ev);
       try {
-        const y = Number(key.slice(0, 4)), m = Number(key.slice(5, 7)); const res = await GH.saveMonth(this.settings, y, m, base, section.dataset.sha || null); section.dataset.sha = res?.content?.sha || res?.sha || section.dataset.sha || ''; section.__events = base; announceStatus(`Saved to data/${key}.json`);
+        const y = Number(key.slice(0, 4)), m = Number(key.slice(5, 7));
+        await LocalStore.saveMonth(y, m, base);
+        section.__events = base; announceStatus(`Saved to local storage.`);
         const grid = section.querySelector('.month-grid'); const active = Array.from(section.querySelectorAll('.holiday-toggle[aria-pressed="true"]')).map(b => b.dataset.country); let combo = base.slice(); for (const cc of active) { const urls = { us: this.settings.holidays.usUrl, uk: this.settings.holidays.ukUrl, nl: this.settings.holidays.nlUrl }; const u = urls[cc]; if (u) { const evts = await getOverlay(cc, u, parseISODate(key + '-01')); combo = combo.concat(evts); } } await this.renderGrid(parseISODate(key + '-01'), grid, combo);
-      } catch (e) { consoleWarn('save fail', e); announceStatus('Save failed. Check token permissions and network.'); }
+      } catch (e) { consoleWarn('save fail', e); announceStatus('Save failed.'); }
       this.closeModal();
     }
 
@@ -310,7 +277,12 @@
       const key = this.editingMonthKey; const section = this.findSectionByKey(key); if (!section) return;
       const id = this.f.id.value; if (!id) { this.closeModal(); return; }
       let base = this.collectBaseEvents(section); base = base.filter(e => e.id !== id);
-      try { const y = Number(key.slice(0, 4)), m = Number(key.slice(5, 7)); const res = await GH.saveMonth(this.settings, y, m, base, section.dataset.sha || null); section.dataset.sha = res?.content?.sha || res?.sha || section.dataset.sha || ''; section.__events = base; announceStatus(`Deleted. Saved to data/${key}.json`); const grid = section.querySelector('.month-grid'); await this.renderGrid(parseISODate(key + '-01'), grid, base); } catch (e) { consoleWarn('delete fail', e); announceStatus('Delete failed.'); }
+      try {
+        const y = Number(key.slice(0, 4)), m = Number(key.slice(5, 7));
+        await LocalStore.saveMonth(y, m, base);
+        section.__events = base; announceStatus(`Deleted.`);
+        const grid = section.querySelector('.month-grid'); await this.renderGrid(parseISODate(key + '-01'), grid, base);
+      } catch (e) { consoleWarn('delete fail', e); announceStatus('Delete failed.'); }
       this.closeModal();
     }
   }
