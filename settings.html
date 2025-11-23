@@ -112,42 +112,69 @@
       function saveLocal(s){ localStorage.setItem(KEY, JSON.stringify(s)); }
       function status(msg){ const el=document.getElementById('status'); if(el) el.textContent=msg; }
 
-      async function loadShared(){
-        // If opened as file:// the fetch will be blocked — remind user
-        if (location.protocol === 'file:') {
-          status('Open this page via your GitHub Pages URL (https://.../settings.html), not file://');
+      // Build robust candidate URLs for config/settings.json, then try each until one succeeds.
+      function candidateConfigUrls(){
+  const parts = location.pathname.split('/').filter(Boolean);
+  const repo = parts.length ? parts[0] : '';  // choose first segment (“Calendar”)
+  const candidates = [
+    './config/settings.json',
+    '/config/settings.json',
+    repo ? `/${repo}/config/settings.json` : null  // correct fallback path
+  ].filter(Boolean);
+  return candidates;
+}
+
+      async function fetchFirstAvailable(urls){
+        for (const u of urls){
+          try {
+            const url = new URL(u, location.href);
+            // cache-bust to avoid stale responses from GH Pages
+            url.searchParams.set('v', Date.now());
+            const res = await fetch(url.toString(), { cache: 'no-store' });
+            if (res.ok) {
+              status(`Loaded shared settings from ${url.pathname}`);
+              return await res.json();
+            } else {
+              console.warn('[settings] fetch', url.toString(), res.status);
+            }
+          } catch (e) {
+            console.warn('[settings] fetch error', u, e);
+          }
         }
-        try {
-          const url = new URL('./config/settings.json', location.href);
-// cache-bust to avoid old versions
-url.searchParams.set('v', Date.now());
+        status('Could not read config/settings.json from any known path.');
+        return null;
+      }
 
-const res = await fetch(url.toString(), { cache: 'no-store' });
-
-          if (!res.ok) { status('Could not read config/settings.json (HTTP '+res.status+').'); return null; }
-          const json = await res.json();
-          status('Loaded shared settings from config/settings.json');
-          return json;
-        } catch (e) {
-          status('Failed to fetch config/settings.json. Check path/case and that it exists.');
-          return null;
+      function setIfPresent(id, obj, key){
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+          document.getElementById(id).value = obj[key] ?? '';
         }
       }
 
       function fillForm(from){
         if (!from) return;
-        const $ = (id)=> document.getElementById(id);
         const { preferences = {}, holidays = {}, repo = {}, integrations = {} } = from;
-        if (repo.owner) $('#owner').value = repo.owner;
-        if (repo.name)  $('#repo').value  = repo.name;
-        if (holidays.usUrl) $('#hol_us').value = holidays.usUrl;
-        if (holidays.ukUrl) $('#hol_uk').value = holidays.ukUrl;
-        if (holidays.nlUrl) $('#hol_nl').value = holidays.nlUrl;
-        if (integrations.tripitIcalUrl) $('#tripit').value = integrations.tripitIcalUrl;
-        if (preferences.theme) $('#theme').value = preferences.theme;
-        if (typeof preferences.weekStart === 'number') $('#weekStart').value = String(preferences.weekStart);
-        if (typeof preferences.timeFormat24h === 'boolean') $('#timeFormat').value = preferences.timeFormat24h ? '24' : '12';
-        if (preferences.timezone) $('#timezone').value = preferences.timezone;
+        setIfPresent('owner', repo, 'owner');
+        setIfPresent('repo',  repo, 'name');
+
+        setIfPresent('hol_us', holidays, 'usUrl');
+        setIfPresent('hol_uk', holidays, 'ukUrl');
+        setIfPresent('hol_nl', holidays, 'nlUrl');
+
+        setIfPresent('tripit', integrations, 'tripitIcalUrl');
+
+        if (Object.prototype.hasOwnProperty.call(preferences, 'theme')) {
+          document.getElementById('theme').value = preferences.theme ?? 'light';
+        }
+        if (Object.prototype.hasOwnProperty.call(preferences, 'weekStart')) {
+          document.getElementById('weekStart').value = String(preferences.weekStart ?? 1);
+        }
+        if (Object.prototype.hasOwnProperty.call(preferences, 'timeFormat24h')) {
+          document.getElementById('timeFormat').value = (preferences.timeFormat24h ? '24' : '12');
+        }
+        if (Object.prototype.hasOwnProperty.call(preferences, 'timezone')) {
+          document.getElementById('timezone').value = preferences.timezone ?? 'Europe/Amsterdam';
+        }
       }
 
       // --- Init form: load local first, then overlay shared ---
@@ -166,7 +193,7 @@ const res = await fetch(url.toString(), { cache: 'no-store' });
       $('#timezone').value = s.timezone || 'Europe/Amsterdam';
 
       // Now overlay shared file values if available
-      loadShared().then(json => { if (json) fillForm(json); });
+      fetchFirstAvailable(candidateConfigUrls()).then(json => { if (json) fillForm(json); });
 
       // Local save
       $('#saveBtn').addEventListener('click', () => {
@@ -240,7 +267,10 @@ const res = await fetch(url.toString(), { cache: 'no-store' });
       }
 
       document.getElementById('saveSharedBtn').addEventListener('click', saveShared);
-      document.getElementById('reloadSharedBtn').addEventListener('click', async ()=>{ const j = await loadShared(); if (j) fillForm(j); });
+      document.getElementById('reloadSharedBtn').addEventListener('click', async ()=>{ 
+        const j = await fetchFirstAvailable(candidateConfigUrls()); 
+        if (j) fillForm(j); 
+      });
     })();
   </script>
 </body>

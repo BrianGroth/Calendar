@@ -15,6 +15,6 @@
     "name": "Calendar"
   },
   "integrations": {
-    "tripitIcalUrl": "https://www.tripit.com/feed/ical/private/B7836231-F75B824C12699491D8912CB3321BEDE7/tripit.ics"
+    "tripitIcalUrl": "must be local cache. tripit.ics"
   }
 }
