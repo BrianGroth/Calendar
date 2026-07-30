@@ -1,67 +1,57 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Shared Calendar</title>
-  <link rel="stylesheet" href="styles.css" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calendar</title>
+<link rel="stylesheet" href="styles.css">
 </head>
-
-<body class="light">
-  <header class="topbar">
-    <h1>Shared Calendar</h1>
-    <button id="settingsBtn" type="button">⚙️ Settings</button>
-  </header>
-
-  <main id="monthsContainer" aria-label="Calendar" class="calendar"></main>
-  <div id="status" aria-live="polite" class="status"></div>
-
-  <!-- Event Modal -->
-  <dialog id="eventModal" class="event-modal">
-    <form method="dialog" class="event-form">
-      <input type="hidden" id="eventId" />
-
-      <label>
-        Title
-        <input type="text" id="eventTitle" required />
-      </label>
-      <label>
-        Date
-        <input type="date" id="eventDate" required />
-      </label>
-      <label>
-        Start Time
-        <input type="time" id="eventStart" />
-      </label>
-      <label>
-        End Time
-        <input type="time" id="eventEnd" />
-      </label>
-      <label>
-        Notes
-        <textarea id="eventNotes" rows="2"></textarea>
-      </label>
-      <label>
-        URL (TripIt or other)
-        <input type="url" id="eventUrl" placeholder="https://..." />
-      </label>
-
-      <div class="buttons">
-        <button type="button" id="saveEventBtn">Save</button>
-        <button type="button" id="deleteEventBtn">Delete</button>
-        <button type="button" id="cancelEventBtn">Cancel</button>
+<body>
+  <div class="app">
+    <header class="toolbar">
+      <div class="toolbar-left">
+        <button id="prevBtn" class="nav-btn" aria-label="Previous month">&#8249;</button>
+        <button id="todayBtn" class="today-btn">Today</button>
+        <button id="nextBtn" class="nav-btn" aria-label="Next month">&#8250;</button>
       </div>
-    </form>
-  </dialog>
+      <h1 id="rangeLabel" class="range-label"></h1>
+      <div class="toolbar-right">
+        <button id="exportBtn" class="ghost-btn" title="Export events as JSON">Export</button>
+        <label class="ghost-btn" for="importInput" title="Import events from JSON">Import
+          <input type="file" id="importInput" accept="application/json" hidden>
+        </label>
+      </div>
+    </header>
 
-  <script src="lib/ics.js"></script>
+    <main id="calendarGrid" class="calendar-grid"></main>
+  </div>
+
+  <div id="dayModal" class="modal-overlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modal-header">
+        <h2 id="modalTitle">Day details</h2>
+        <button id="closeModal" class="icon-btn" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <ul id="eventList" class="event-list"></ul>
+        <form id="eventForm" class="event-form">
+          <input type="text" id="eventTitle" placeholder="Add a detail…" required maxlength="200">
+          <div class="event-form-row">
+            <input type="time" id="eventTime">
+            <select id="eventColor" aria-label="Color tag">
+              <option value="blue">Blue</option>
+              <option value="green">Green</option>
+              <option value="orange">Orange</option>
+              <option value="purple">Purple</option>
+              <option value="red">Red</option>
+            </select>
+            <button type="submit" class="add-btn">Add</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
-  <script>
-    document.getElementById('settingsBtn').addEventListener('click', () => {
-      window.location.href = 'settings.html';
-    });
-  </script>
 </body>
-
 </html>

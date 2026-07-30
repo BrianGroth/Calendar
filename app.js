@@ -1,291 +1,316 @@
 /*
-  Calendar App — app.js (v9)
-  - LocalStorage only (GitHub/TripIt removed)
-  - Infinite scrolling with virtualization (keeps ~12 months in DOM)
-  - Weekday headers aligned as the first row of the grid
+  Calendar App — app.js
+  Two-month view with month-by-month navigation and per-day details.
+  Events are persisted to localStorage; no backend required.
 */
 
-; (() => {
-  const DEFAULT_TZ = 'Europe/Amsterdam';
-  const STATUS_EL = () => document.getElementById('status');
-  const MAX_RENDERED_MONTHS = 12; // Keep ~1 year in DOM
+const STORAGE_KEY = "calendar.events.v1";
+const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTH_LABELS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
 
-  // ---------------------------
-  // Settings
-  // ---------------------------
-  const SETTINGS_KEY = 'calendar.settings.v1';
-  const defaultSettings = {
-    timeFormat24h: true,
-    weekStart: 1,
-    timezone: DEFAULT_TZ,
-    theme: 'light',
-    holidays: { usUrl: '', ukUrl: '', nlUrl: '' }
+let events = loadEvents();
+let anchorYear = new Date().getFullYear();
+let anchorMonth = new Date().getMonth(); // 0-based, left-hand month of the pair
+let activeDateKey = null;
+
+const gridEl = document.getElementById("calendarGrid");
+const rangeLabelEl = document.getElementById("rangeLabel");
+const modalEl = document.getElementById("dayModal");
+const modalTitleEl = document.getElementById("modalTitle");
+const eventListEl = document.getElementById("eventList");
+const eventFormEl = document.getElementById("eventForm");
+const eventTitleInput = document.getElementById("eventTitle");
+const eventTimeInput = document.getElementById("eventTime");
+const eventColorSelect = document.getElementById("eventColor");
+
+document.getElementById("prevBtn").addEventListener("click", () => shiftMonth(-1));
+document.getElementById("nextBtn").addEventListener("click", () => shiftMonth(1));
+document.getElementById("todayBtn").addEventListener("click", goToToday);
+document.getElementById("closeModal").addEventListener("click", closeModal);
+modalEl.addEventListener("click", (e) => {
+  if (e.target === modalEl) closeModal();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !modalEl.hidden) closeModal();
+});
+eventFormEl.addEventListener("submit", handleAddEvent);
+document.getElementById("exportBtn").addEventListener("click", exportEvents);
+document.getElementById("importInput").addEventListener("change", importEvents);
+
+render();
+
+function loadEvents() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveEvents() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+}
+
+function dateKey(year, month, day) {
+  return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function shiftMonth(delta) {
+  anchorMonth += delta;
+  if (anchorMonth < 0) {
+    anchorMonth = 11;
+    anchorYear -= 1;
+  } else if (anchorMonth > 11) {
+    anchorMonth = 0;
+    anchorYear += 1;
+  }
+  render();
+}
+
+function goToToday() {
+  const now = new Date();
+  anchorYear = now.getFullYear();
+  anchorMonth = now.getMonth();
+  render();
+}
+
+function render() {
+  gridEl.innerHTML = "";
+  const first = buildMonth(anchorYear, anchorMonth);
+  let secondMonth = anchorMonth + 1;
+  let secondYear = anchorYear;
+  if (secondMonth > 11) {
+    secondMonth = 0;
+    secondYear += 1;
+  }
+  const second = buildMonth(secondYear, secondMonth);
+  gridEl.appendChild(first);
+  gridEl.appendChild(second);
+
+  rangeLabelEl.textContent = `${MONTH_LABELS[anchorMonth]} ${anchorYear} – ${MONTH_LABELS[secondMonth]} ${secondYear}`;
+}
+
+function buildMonth(year, month) {
+  const monthEl = document.createElement("section");
+  monthEl.className = "month";
+
+  const title = document.createElement("h2");
+  title.className = "month-title";
+  title.textContent = `${MONTH_LABELS[month]} ${year}`;
+  monthEl.appendChild(title);
+
+  const weekdayRow = document.createElement("div");
+  weekdayRow.className = "weekday-row";
+  WEEKDAY_LABELS.forEach((label) => {
+    const cell = document.createElement("div");
+    cell.className = "weekday-cell";
+    cell.textContent = label;
+    weekdayRow.appendChild(cell);
+  });
+  monthEl.appendChild(weekdayRow);
+
+  const dayGrid = document.createElement("div");
+  dayGrid.className = "day-grid";
+
+  const firstOfMonth = new Date(year, month, 1);
+  const startWeekday = firstOfMonth.getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+  const today = new Date();
+  const todayKey = dateKey(today.getFullYear(), today.getMonth(), today.getDate());
+
+  const totalCells = Math.ceil((startWeekday + daysInMonth) / 7) * 7;
+
+  for (let i = 0; i < totalCells; i++) {
+    const dayNum = i - startWeekday + 1;
+    let cellYear = year;
+    let cellMonth = month;
+    let cellDay = dayNum;
+    let otherMonth = false;
+
+    if (dayNum < 1) {
+      cellMonth = month - 1;
+      cellYear = month === 0 ? year - 1 : year;
+      cellDay = daysInPrevMonth + dayNum;
+      otherMonth = true;
+    } else if (dayNum > daysInMonth) {
+      cellMonth = month + 1;
+      cellYear = month === 11 ? year + 1 : year;
+      cellDay = dayNum - daysInMonth;
+      otherMonth = true;
+    }
+    if (cellMonth < 0) cellMonth = 11;
+    if (cellMonth > 11) cellMonth = 0;
+
+    const key = dateKey(cellYear, cellMonth, cellDay);
+    const cell = document.createElement("div");
+    cell.className = "day-cell" + (otherMonth ? " other-month" : "") + (key === todayKey ? " today" : "");
+    cell.dataset.dateKey = key;
+
+    const numberEl = document.createElement("div");
+    numberEl.className = "day-number";
+    numberEl.textContent = cellDay;
+    cell.appendChild(numberEl);
+
+    const dayEvents = (events[key] || []).slice().sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+    if (dayEvents.length) {
+      const eventsWrap = document.createElement("div");
+      eventsWrap.className = "day-events";
+      const visible = dayEvents.slice(0, 3);
+      visible.forEach((ev) => {
+        const pill = document.createElement("div");
+        pill.className = `day-event-pill pill-${ev.color || "blue"}`;
+        pill.textContent = ev.time ? `${ev.time} ${ev.title}` : ev.title;
+        eventsWrap.appendChild(pill);
+      });
+      if (dayEvents.length > visible.length) {
+        const more = document.createElement("div");
+        more.className = "day-event-more";
+        more.textContent = `+${dayEvents.length - visible.length} more`;
+        eventsWrap.appendChild(more);
+      }
+      cell.appendChild(eventsWrap);
+    }
+
+    cell.addEventListener("click", () => openModal(key, cellYear, cellMonth, cellDay));
+    dayGrid.appendChild(cell);
+  }
+
+  monthEl.appendChild(dayGrid);
+  return monthEl;
+}
+
+function openModal(key, year, month, day) {
+  activeDateKey = key;
+  modalTitleEl.textContent = `${MONTH_LABELS[month]} ${day}, ${year}`;
+  renderEventList();
+  eventFormEl.reset();
+  modalEl.hidden = false;
+  eventTitleInput.focus();
+}
+
+function closeModal() {
+  modalEl.hidden = true;
+  activeDateKey = null;
+}
+
+function renderEventList() {
+  eventListEl.innerHTML = "";
+  const dayEvents = (events[activeDateKey] || []).slice().sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+
+  if (!dayEvents.length) {
+    const empty = document.createElement("li");
+    empty.className = "empty-state";
+    empty.textContent = "No details yet for this day.";
+    eventListEl.appendChild(empty);
+    return;
+  }
+
+  dayEvents.forEach((ev) => {
+    const item = document.createElement("li");
+    item.className = "event-item";
+
+    const dot = document.createElement("span");
+    dot.className = "event-color-dot";
+    dot.style.background = `var(--tag-${ev.color || "blue"})`;
+    item.appendChild(dot);
+
+    const textWrap = document.createElement("div");
+    textWrap.className = "event-item-text";
+    const titleEl = document.createElement("div");
+    titleEl.className = "event-item-title";
+    titleEl.textContent = ev.title;
+    textWrap.appendChild(titleEl);
+    if (ev.time) {
+      const timeEl = document.createElement("div");
+      timeEl.className = "event-item-time";
+      timeEl.textContent = formatTime(ev.time);
+      textWrap.appendChild(timeEl);
+    }
+    item.appendChild(textWrap);
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "event-delete-btn";
+    deleteBtn.innerHTML = "&times;";
+    deleteBtn.setAttribute("aria-label", "Delete detail");
+    deleteBtn.addEventListener("click", () => deleteEvent(ev.id));
+    item.appendChild(deleteBtn);
+
+    eventListEl.appendChild(item);
+  });
+}
+
+function formatTime(time) {
+  const [h, m] = time.split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}:${String(m).padStart(2, "0")} ${period}`;
+}
+
+function handleAddEvent(e) {
+  e.preventDefault();
+  const title = eventTitleInput.value.trim();
+  if (!title || !activeDateKey) return;
+
+  const newEvent = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    title,
+    time: eventTimeInput.value || "",
+    color: eventColorSelect.value,
   };
 
-  function loadLocalSettings() {
-    try { const j = localStorage.getItem(SETTINGS_KEY); return j ? JSON.parse(j) : { ...defaultSettings }; }
-    catch { return { ...defaultSettings }; }
-  }
-  function saveLocalSettings(s) { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); }
+  if (!events[activeDateKey]) events[activeDateKey] = [];
+  events[activeDateKey].push(newEvent);
+  saveEvents();
 
-  // ---------------------------
-  // Utils
-  // ---------------------------
-  const pad = (n) => n.toString().padStart(2, '0');
-  const fmtMonthKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
-  const monthStart = (d) => new Date(Date.UTC(d.getFullYear(), d.getMonth(), 1));
-  const monthEnd = (d) => new Date(Date.UTC(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59));
-  const addMonths = (d, k) => { const x = new Date(d.getFullYear(), d.getMonth(), 1); x.setMonth(x.getMonth() + k); return x; };
-  const toISODateLocal = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  const parseISODate = (s) => { const [y, m, dd] = s.split('-').map(Number); return new Date(y, m - 1, dd); };
-  const formatTimeHHMM = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  const announceStatus = (m) => { const el = STATUS_EL(); if (el) el.textContent = m; console.log('[status]', m); };
-  const consoleWarn = (m, e) => console.warn(m, e || '');
-  const uuid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = crypto.getRandomValues(new Uint8Array(1))[0] & 15; const v = c === 'x' ? r : (r & 0x3 | 0x8); return v.toString(16); });
+  eventFormEl.reset();
+  renderEventList();
+  render();
+  eventTitleInput.focus();
+}
 
-  // ---------------------------
-  // Local Storage (Events)
-  // ---------------------------
-  const LocalStore = {
-    getKey(y, m) { return `calendar.data.${y}-${pad(m)}`; },
-    async loadMonth(y, m) {
-      try {
-        const key = this.getKey(y, m);
-        const json = localStorage.getItem(key);
-        const events = json ? JSON.parse(json) : [];
-        return { events: Array.isArray(events) ? events : [] };
-      } catch (e) { consoleWarn('loadMonth', e); return { events: [] }; }
-    },
-    async saveMonth(y, m, events) {
-      try {
-        const key = this.getKey(y, m);
-        localStorage.setItem(key, JSON.stringify(events));
-        return true;
-      } catch (e) { consoleWarn('saveMonth', e); return false; }
+function deleteEvent(id) {
+  if (!activeDateKey || !events[activeDateKey]) return;
+  events[activeDateKey] = events[activeDateKey].filter((ev) => ev.id !== id);
+  if (!events[activeDateKey].length) delete events[activeDateKey];
+  saveEvents();
+  renderEventList();
+  render();
+}
+
+function exportEvents() {
+  const blob = new Blob([JSON.stringify(events, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "calendar-events.json";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importEvents(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const imported = JSON.parse(reader.result);
+      if (imported && typeof imported === "object") {
+        events = imported;
+        saveEvents();
+        render();
+        if (activeDateKey) renderEventList();
+      }
+    } catch {
+      alert("Could not import that file — please select a valid calendar-events.json export.");
     }
   };
-
-  // ---------------------------
-  // Overlays (Holidays)
-  // ---------------------------
-  const OverlayCache = new Map();
-  async function fetchICS(url) { const r = await fetch(url, { cache: 'no-store' }); if (!r.ok) throw new Error('ICS fetch ' + r.status); const txt = await r.text(); return window.ICS.parseICS(txt); }
-  function filterEventsToMonth(evts, monthDate) {
-    const s = monthStart(monthDate), e = monthEnd(monthDate);
-    return evts.filter(x => { const d = x.start instanceof Date ? x.start : new Date(x.start); return d >= s && d <= e; }).map(x => ({
-      id: x.id || uuid(), title: x.summary || x.title || 'Untitled', date: toISODateLocal(new Date(x.start)),
-      startTime: x.start instanceof Date ? formatTimeHHMM(x.start) : '', endTime: x.end instanceof Date ? formatTimeHHMM(x.end) : '',
-      notes: x.description || '', url: x.url || '', __overlay: true
-    }));
-  }
-  async function getOverlay(key, url, monthDate) { if (!url) return []; const k = `${key}|${fmtMonthKey(monthDate)}`; if (OverlayCache.has(k)) return OverlayCache.get(k); try { const raw = await fetchICS(url); const m = filterEventsToMonth(raw, monthDate); OverlayCache.set(k, m); return m; } catch (e) { consoleWarn('overlay ' + key, e); return []; } }
-
-  // ---------------------------
-  // Calendar
-  // ---------------------------
-  class CalendarApp {
-    constructor(rootId = 'monthsContainer') {
-      this.settings = loadLocalSettings();
-      this.root = document.getElementById(rootId); if (!this.root) throw new Error('#monthsContainer missing');
-      this.root.classList.add('calendar-scroll');
-
-      this.loadedKeys = new Set(); this.monthNodes = []; this.current = new Date();
-      // Allow infinite future scrolling, but we'll only render a window
-      this.maxFuture = addMonths(this.current, 60); // 5 years
-
-      this.observeSentinels();
-      this.renderInitial();
-      this.bindModal();
-    }
-
-    observeSentinels() {
-      const top = document.createElement('div'); top.id = 'topSentinel'; top.style.height = '1px'; this.root.prepend(top);
-      const bottom = document.createElement('div'); bottom.id = 'bottomSentinel'; bottom.style.height = '1px'; this.root.appendChild(bottom);
-
-      // Increased rootMargin to 2000px for earlier loading
-      const ioTop = new IntersectionObserver(es => { es.forEach(e => { if (!e.isIntersecting) return; const firstKey = this.monthNodes[0]?.dataset?.monthKey || fmtMonthKey(this.current); const [y, m] = firstKey.split('-').map(Number); const prev = new Date(y, (m - 1) - 1, 1); this.ensureMonth(prev, 'prepend'); }); }, { root: null, rootMargin: '2000px', threshold: 0 });
-      ioTop.observe(top);
-
-      const ioBottom = new IntersectionObserver(es => { es.forEach(e => { if (!e.isIntersecting) return; const lastKey = this.monthNodes[this.monthNodes.length - 1]?.dataset?.monthKey || fmtMonthKey(this.current); const [y, m] = lastKey.split('-').map(Number); const base = new Date(y, m - 1, 1); base.setMonth(base.getMonth() + 1); if (base > this.maxFuture) return; this.ensureMonth(base, 'append'); }); }, { root: null, rootMargin: '2000px', threshold: 0 });
-      ioBottom.observe(bottom);
-    }
-
-    async renderInitial() {
-      const now = new Date();
-      // Render a few months around now
-      await this.ensureMonth(new Date(now.getFullYear(), now.getMonth(), 1), 'append');
-      await this.ensureMonth(new Date(now.getFullYear(), now.getMonth() + 1, 1), 'append');
-      await this.ensureMonth(new Date(now.getFullYear(), now.getMonth() - 1, 1), 'prepend');
-    }
-
-    async ensureMonth(d, position = 'append') {
-      const key = fmtMonthKey(d); if (this.loadedKeys.has(key)) return;
-      this.loadedKeys.add(key);
-
-      const section = await this.renderMonthSection(d);
-
-      if (position === 'prepend') {
-        // Prepend after topSentinel
-        const firstMonth = this.monthNodes[0];
-        if (firstMonth) {
-          this.root.insertBefore(section, firstMonth);
-          this.monthNodes.unshift(section);
-        } else {
-          // Should not happen if initialized correctly, but fallback
-          const bottom = document.getElementById('bottomSentinel');
-          this.root.insertBefore(section, bottom);
-          this.monthNodes.push(section);
-        }
-      } else {
-        // Append before bottomSentinel
-        const bottom = document.getElementById('bottomSentinel');
-        this.root.insertBefore(section, bottom);
-        this.monthNodes.push(section);
-      }
-
-      this.pruneMonths(position);
-    }
-
-    pruneMonths(addedPosition) {
-      if (this.monthNodes.length <= MAX_RENDERED_MONTHS) return;
-
-      if (addedPosition === 'append') {
-        // We added to bottom, remove from top
-        const toRemove = this.monthNodes.shift();
-        if (toRemove) {
-          toRemove.remove();
-          this.loadedKeys.delete(toRemove.dataset.monthKey);
-        }
-      } else if (addedPosition === 'prepend') {
-        // We added to top, remove from bottom
-        const toRemove = this.monthNodes.pop();
-        if (toRemove) {
-          toRemove.remove();
-          this.loadedKeys.delete(toRemove.dataset.monthKey);
-        }
-      }
-    }
-
-    async renderMonthSection(date) {
-      const y = date.getFullYear(), m = date.getMonth() + 1, key = fmtMonthKey(date);
-      const wrap = document.createElement('section'); wrap.className = 'month-section'; wrap.dataset.monthKey = key; wrap.setAttribute('aria-label', `Month ${key}`);
-
-      const header = document.createElement('header'); header.className = 'month-header';
-      const title = document.createElement('h2'); title.textContent = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(date); title.className = 'month-title'; header.appendChild(title);
-
-      const toggles = document.createElement('div'); toggles.className = 'holiday-toggles';
-      const mkBtn = (label, key) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'holiday-toggle'; b.dataset.country = key; b.setAttribute('aria-pressed', 'false'); b.textContent = label; b.addEventListener('click', () => this.toggleOverlay(key, date, wrap, b)); return b; };
-      toggles.appendChild(mkBtn('US', 'us'));
-      toggles.appendChild(mkBtn('UK', 'uk'));
-      toggles.appendChild(mkBtn('NL', 'nl'));
-      header.appendChild(toggles);
-      wrap.appendChild(header);
-
-      const grid = document.createElement('div'); grid.className = 'month-grid'; grid.setAttribute('role', 'grid'); grid.setAttribute('aria-readonly', 'false'); wrap.appendChild(grid);
-
-      const { events } = await LocalStore.loadMonth(y, m); wrap.__events = Array.isArray(events) ? events : [];
-      await this.renderGrid(date, grid, wrap.__events);
-      this.precacheOverlays(date).catch(() => { });
-      return wrap;
-    }
-
-    async precacheOverlays(d) {
-      const s = this.settings; const t = [];
-      if (s.holidays.usUrl) t.push(getOverlay('us', s.holidays.usUrl, d));
-      if (s.holidays.ukUrl) t.push(getOverlay('uk', s.holidays.ukUrl, d));
-      if (s.holidays.nlUrl) t.push(getOverlay('nl', s.holidays.nlUrl, d));
-      await Promise.allSettled(t);
-    }
-
-    async toggleOverlay(key, date, section, btn) {
-      const pressed = btn.getAttribute('aria-pressed') === 'true';
-      btn.setAttribute('aria-pressed', String(!pressed));
-      const urls = { us: this.settings.holidays.usUrl, uk: this.settings.holidays.ukUrl, nl: this.settings.holidays.nlUrl };
-      const url = urls[key];
-      if (!url) { announceStatus('Holiday URL not configured.'); }
-      const grid = section.querySelector('.month-grid'); if (!grid) return;
-      const base = section.__events || []; const overlay = !pressed && url ? await getOverlay(key, url, date) : [];
-      await this.renderGrid(date, grid, base.concat(overlay));
-    }
-
-    async renderGrid(date, grid, events) {
-      // Use DocumentFragment for batch insertion
-      const frag = document.createDocumentFragment();
-
-      // Weekday header row (aligned to columns)
-      ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(n => { const h = document.createElement('div'); h.className = 'weekday'; h.textContent = n; frag.appendChild(h); });
-
-      const first = new Date(date.getFullYear(), date.getMonth(), 1);
-      const firstWeekday = (first.getDay() + 6) % 7; // Monday-first
-      const leading = firstWeekday;
-      const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-      const totalCells = leading + daysInMonth + (7 - ((leading + daysInMonth) % 7 || 7));
-      const todayISO = toISODateLocal(new Date());
-
-      for (let i = 0; i < totalCells; i++) {
-        const cell = document.createElement('div'); cell.className = 'day-cell'; cell.setAttribute('role', 'gridcell');
-        const dayNum = i - leading + 1;
-        if (i < leading || dayNum > daysInMonth) { cell.classList.add('outside'); frag.appendChild(cell); continue; }
-        const cellDate = new Date(date.getFullYear(), date.getMonth(), dayNum); const iso = toISODateLocal(cellDate); cell.dataset.date = iso;
-        const label = document.createElement('button'); label.type = 'button'; label.className = 'day-label'; label.textContent = String(dayNum); label.setAttribute('aria-label', `Add or view events for ${iso}`); label.addEventListener('click', () => this.openEventModal({ date: iso })); cell.appendChild(label);
-        if (iso === todayISO) cell.classList.add('today');
-        const list = document.createElement('ul'); list.className = 'event-list';
-        events.filter(e => e.date === iso).forEach(ev => { const li = document.createElement('li'); li.className = 'event-item' + (ev.__overlay ? ' overlay' : ''); const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'event-btn'; const prefix = ev.startTime ? `${ev.startTime} ` : ''; btn.textContent = `${prefix}${ev.title}`; btn.title = ev.notes || ''; btn.addEventListener('click', () => { if (ev.__overlay && ev.url) { window.open(ev.url, '_blank'); } else { this.openEventModal(ev); } }); li.appendChild(btn); if (ev.url && ev.__overlay) { const a = document.createElement('a'); a.href = ev.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.className = 'event-link'; a.textContent = '↗'; li.appendChild(a); } list.appendChild(li); });
-        cell.appendChild(list); frag.appendChild(cell);
-      }
-      grid.innerHTML = '';
-      grid.appendChild(frag);
-    }
-
-    // Modal CRUD
-    bindModal() {
-      this.modal = document.getElementById('eventModal'); if (!this.modal) { consoleWarn('No #eventModal'); return; }
-      const $ = (sel) => this.modal.querySelector(sel);
-      this.f = { id: $('#eventId'), title: $('#eventTitle'), date: $('#eventDate'), start: $('#eventStart'), end: $('#eventEnd'), notes: $('#eventNotes'), url: $('#eventUrl'), save: $('#saveEventBtn'), del: $('#deleteEventBtn'), cancel: $('#cancelEventBtn') };
-      this.f.save?.addEventListener('click', () => this.onSaveEvent()); this.f.del?.addEventListener('click', () => this.onDeleteEvent()); this.f.cancel?.addEventListener('click', () => this.closeModal());
-      this.modal.addEventListener('keydown', (e) => { if (e.key === 'Escape') this.closeModal(); });
-    }
-
-    openEventModal(ev) {
-      if (!this.modal) return;
-      const isNew = !ev.id; const dflt = { id: '', title: '', date: toISODateLocal(new Date()), startTime: '', endTime: '', notes: '', url: '' };
-      const data = { ...dflt, ...ev }; this.editingMonthKey = data.date.slice(0, 7);
-      this.f.id.value = data.id || ''; this.f.title.value = data.title || ''; this.f.date.value = data.date || ''; this.f.start.value = data.startTime || ''; this.f.end.value = data.endTime || ''; this.f.notes.value = data.notes || ''; this.f.url.value = data.url || '';
-      if (this.f.del) this.f.del.style.display = isNew ? 'none' : '';
-      this.modal.showModal?.(); this.f.title?.focus();
-    }
-
-    closeModal() { try { this.modal.close?.(); } catch { } }
-    findSectionByKey(key) { return this.monthNodes.find(n => n.dataset.monthKey === key); }
-    collectBaseEvents(section) { return Array.isArray(section.__events) ? section.__events.filter(e => !e.__overlay) : []; }
-
-    async onSaveEvent() {
-      const key = this.editingMonthKey; const section = this.findSectionByKey(key); if (!section) return;
-      const ev = { id: this.f.id.value || uuid(), title: this.f.title.value.trim(), date: this.f.date.value, startTime: this.f.start.value, endTime: this.f.end.value, notes: this.f.notes.value, url: this.f.url.value };
-      if (!ev.title || !ev.date) { announceStatus('Title and date are required.'); return; }
-      let base = this.collectBaseEvents(section); const idx = base.findIndex(x => x.id === ev.id); if (idx >= 0) base[idx] = ev; else base.push(ev);
-      try {
-        const y = Number(key.slice(0, 4)), m = Number(key.slice(5, 7));
-        await LocalStore.saveMonth(y, m, base);
-        section.__events = base; announceStatus(`Saved to local storage.`);
-        const grid = section.querySelector('.month-grid'); const active = Array.from(section.querySelectorAll('.holiday-toggle[aria-pressed="true"]')).map(b => b.dataset.country); let combo = base.slice(); for (const cc of active) { const urls = { us: this.settings.holidays.usUrl, uk: this.settings.holidays.ukUrl, nl: this.settings.holidays.nlUrl }; const u = urls[cc]; if (u) { const evts = await getOverlay(cc, u, parseISODate(key + '-01')); combo = combo.concat(evts); } } await this.renderGrid(parseISODate(key + '-01'), grid, combo);
-      } catch (e) { consoleWarn('save fail', e); announceStatus('Save failed.'); }
-      this.closeModal();
-    }
-
-    async onDeleteEvent() {
-      const key = this.editingMonthKey; const section = this.findSectionByKey(key); if (!section) return;
-      const id = this.f.id.value; if (!id) { this.closeModal(); return; }
-      let base = this.collectBaseEvents(section); base = base.filter(e => e.id !== id);
-      try {
-        const y = Number(key.slice(0, 4)), m = Number(key.slice(5, 7));
-        await LocalStore.saveMonth(y, m, base);
-        section.__events = base; announceStatus(`Deleted.`);
-        const grid = section.querySelector('.month-grid'); await this.renderGrid(parseISODate(key + '-01'), grid, base);
-      } catch (e) { consoleWarn('delete fail', e); announceStatus('Delete failed.'); }
-      this.closeModal();
-    }
-  }
-
-  document.addEventListener('DOMContentLoaded', () => { try { new CalendarApp('monthsContainer'); announceStatus('Calendar ready.'); } catch (e) { consoleWarn('init', e); announceStatus('Calendar failed to initialize.'); } });
-})();
+  reader.readAsText(file);
+  e.target.value = "";
+}
