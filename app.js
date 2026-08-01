@@ -23,7 +23,8 @@ let editingEventId = null;
 let viewMode = "month"; // "month" | "agenda"
 let searchQuery = "";
 
-const gridEl = document.getElementById("calendarGrid");
+const gridViewportEl = document.getElementById("calendarGrid");
+let currentGridEl = null;
 const weekdayRowEl = document.getElementById("weekdayRow");
 const rangeLabelEl = document.getElementById("rangeLabel");
 const titleBtn = document.getElementById("titleBtn");
@@ -122,6 +123,10 @@ function todayKey() {
   return dateKey(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
+function monthIndex(year, month) {
+  return year * 12 + month;
+}
+
 function shiftMonth(delta) {
   anchorMonth += delta;
   if (anchorMonth < 0) {
@@ -131,14 +136,16 @@ function shiftMonth(delta) {
     anchorMonth = 0;
     anchorYear += 1;
   }
-  render();
+  render(delta > 0 ? "next" : "prev");
 }
 
 function goToToday() {
   const now = new Date();
+  const before = monthIndex(anchorYear, anchorMonth);
   anchorYear = now.getFullYear();
   anchorMonth = now.getMonth();
-  render();
+  const after = monthIndex(anchorYear, anchorMonth);
+  render(after === before ? null : after > before ? "next" : "prev");
 }
 
 function setViewMode(mode) {
@@ -161,12 +168,17 @@ function openDatePicker() {
   pickerYear = anchorYear;
   renderMonthPickerGrid();
   datePickerEl.hidden = false;
+  void datePickerEl.offsetWidth;
+  datePickerEl.classList.add("is-open");
   titleBtn.setAttribute("aria-expanded", "true");
 }
 
 function closeDatePicker() {
-  datePickerEl.hidden = true;
+  datePickerEl.classList.remove("is-open");
   titleBtn.setAttribute("aria-expanded", "false");
+  window.setTimeout(() => {
+    if (!datePickerEl.classList.contains("is-open")) datePickerEl.hidden = true;
+  }, 150);
 }
 
 function renderMonthPickerGrid() {
@@ -179,10 +191,12 @@ function renderMonthPickerGrid() {
     if (pickerYear === anchorYear && idx === anchorMonth) btn.classList.add("is-selected");
     btn.textContent = label;
     btn.addEventListener("click", () => {
+      const before = monthIndex(anchorYear, anchorMonth);
       anchorYear = pickerYear;
       anchorMonth = idx;
+      const after = monthIndex(anchorYear, anchorMonth);
       closeDatePicker();
-      render();
+      render(after === before ? null : after > before ? "next" : "prev");
     });
     monthGridEl.appendChild(btn);
   });
@@ -195,12 +209,17 @@ function toggleMenu() {
 
 function openMenu() {
   menuDropdown.hidden = false;
+  void menuDropdown.offsetWidth;
+  menuDropdown.classList.add("is-open");
   menuBtn.setAttribute("aria-expanded", "true");
 }
 
 function closeMenu() {
-  menuDropdown.hidden = true;
+  menuDropdown.classList.remove("is-open");
   menuBtn.setAttribute("aria-expanded", "false");
+  window.setTimeout(() => {
+    if (!menuDropdown.classList.contains("is-open")) menuDropdown.hidden = true;
+  }, 150);
 }
 
 /* ---------- Rendering ---------- */
@@ -215,8 +234,9 @@ function buildWeekdayRow() {
   });
 }
 
-function render() {
+function render(direction) {
   rangeLabelEl.textContent = `${MONTH_LABELS[anchorMonth]} ${anchorYear}`;
+  animateLabelChange(direction);
 
   const isAgenda = viewMode === "agenda";
   monthPanelEl.hidden = isAgenda;
@@ -226,9 +246,16 @@ function render() {
   if (isAgenda) {
     renderAgendaFull();
   } else {
-    renderMonthGrid();
+    renderMonthGrid(direction);
     renderUpcoming();
   }
+}
+
+function animateLabelChange(direction) {
+  if (!direction) return;
+  rangeLabelEl.classList.remove("label-anim-next", "label-anim-prev");
+  void rangeLabelEl.offsetWidth; // restart animation
+  rangeLabelEl.classList.add(direction === "prev" ? "label-anim-prev" : "label-anim-next");
 }
 
 function allEventsSorted(fromTodayOnly) {
@@ -252,8 +279,14 @@ function matchesSearch(ev) {
   return ev.title.toLowerCase().includes(searchQuery);
 }
 
-function renderMonthGrid() {
-  gridEl.innerHTML = "";
+function renderMonthGrid(direction) {
+  const grid = document.createElement("div");
+  grid.className = "day-grid";
+  if (direction) {
+    grid.classList.add(direction === "prev" ? "day-grid-anim-prev" : "day-grid-anim-next");
+  } else {
+    grid.classList.add("day-grid-anim-fade");
+  }
 
   const firstOfMonth = new Date(anchorYear, anchorMonth, 1);
   const startWeekday = firstOfMonth.getDay();
@@ -325,8 +358,12 @@ function renderMonthGrid() {
     }
 
     cell.addEventListener("click", () => openModal(key, cellYear, cellMonth, cellDay));
-    gridEl.appendChild(cell);
+    grid.appendChild(cell);
   }
+
+  if (currentGridEl) currentGridEl.remove();
+  gridViewportEl.appendChild(grid);
+  currentGridEl = grid;
 }
 
 function renderUpcoming() {
@@ -412,13 +449,18 @@ function openModal(key, year, month, day) {
   modalTitleEl.textContent = `${MONTH_LABELS[month]} ${day}, ${year}`;
   renderEventList();
   modalEl.hidden = false;
+  void modalEl.offsetWidth; // restart transition
+  modalEl.classList.add("is-open");
   eventTitleInput.focus();
 }
 
 function closeModal() {
-  modalEl.hidden = true;
+  modalEl.classList.remove("is-open");
   activeDateKey = null;
   exitEditMode();
+  window.setTimeout(() => {
+    if (!modalEl.classList.contains("is-open")) modalEl.hidden = true;
+  }, 180);
 }
 
 function renderEventList() {
