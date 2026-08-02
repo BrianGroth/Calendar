@@ -6,7 +6,7 @@ A polished, responsive personal calendar you can host directly on GitHub Pages.
 
 - **Focused month view** — scan the month in a spacious grid with a dedicated upcoming-events rail.
 - **Responsive agenda** — switch to a chronological list, with a mobile layout tailored for smaller screens.
-- **Fast navigation** — step through months, jump to today, or use the month-and-year picker.
+- **Bounded month navigation** — scroll or step from three months back through twelve months ahead, jump to today, or use the month-and-year picker.
 - **Event workflow** — add, edit, search, color-code, and delete events with optional times.
 - **Accessible controls** — visible focus states, keyboard calendar navigation, and a focus-managed event dialog.
 - **No backend** — events stay in browser storage; Export and Import move them between browsers.

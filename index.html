@@ -69,7 +69,8 @@
     </header>
 
     <main class="workspace">
-      <section id="monthPanel" class="calendar-panel" aria-label="Month calendar">
+      <section id="monthPanel" class="calendar-panel" aria-label="Month calendar" aria-describedby="calendarScrollHint">
+        <p id="calendarScrollHint" class="sr-only">Scroll vertically over the calendar to move between months. Navigation is available from three months ago through twelve months ahead.</p>
         <div class="weekday-row" id="weekdayRow" aria-hidden="true"></div>
         <div id="calendarGrid" class="day-grid-viewport"></div>
       </section>

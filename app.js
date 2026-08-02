@@ -13,6 +13,12 @@ const MONTH_LABELS = [
 ];
 const MONTH_LABELS_SHORT = MONTH_LABELS.map((m) => m.slice(0, 3));
 const UPCOMING_LIMIT = 8;
+const MONTHS_BACK = 3;
+const MONTHS_AHEAD = 12;
+const referenceDate = new Date();
+const referenceMonthIndex = referenceDate.getFullYear() * 12 + referenceDate.getMonth();
+const earliestMonthIndex = referenceMonthIndex - MONTHS_BACK;
+const latestMonthIndex = referenceMonthIndex + MONTHS_AHEAD;
 
 let events = loadEvents();
 let anchorYear = new Date().getFullYear();
@@ -23,6 +29,8 @@ let editingEventId = null;
 let viewMode = "month"; // "month" | "agenda"
 let searchQuery = "";
 let lastFocusedElement = null;
+let wheelAccumulator = 0;
+let wheelResetTimer = null;
 
 const gridViewportEl = document.getElementById("calendarGrid");
 let currentGridEl = null;
@@ -42,6 +50,10 @@ const agendaViewBtn = document.getElementById("agendaViewBtn");
 const searchInput = document.getElementById("searchInput");
 const menuBtn = document.getElementById("menuBtn");
 const menuDropdown = document.getElementById("menuDropdown");
+const prevBtn = document.getElementById("prevBtn");
+const nextBtn = document.getElementById("nextBtn");
+const yearPrevBtn = document.getElementById("yearPrev");
+const yearNextBtn = document.getElementById("yearNext");
 const agendaDateEl = document.getElementById("agendaDate");
 const mobileMonthBtn = document.getElementById("mobileMonthBtn");
 const mobileAgendaBtn = document.getElementById("mobileAgendaBtn");
@@ -59,8 +71,8 @@ const modalDateLabel = document.getElementById("modalDateLabel");
 const submitEventBtn = document.getElementById("submitEventBtn");
 const cancelEditBtn = document.getElementById("cancelEditBtn");
 
-document.getElementById("prevBtn").addEventListener("click", () => shiftMonth(-1));
-document.getElementById("nextBtn").addEventListener("click", () => shiftMonth(1));
+prevBtn.addEventListener("click", () => shiftMonth(-1));
+nextBtn.addEventListener("click", () => shiftMonth(1));
 document.getElementById("todayBtn").addEventListener("click", goToToday);
 document.getElementById("newEventBtn").addEventListener("click", openNewEventForToday);
 document.getElementById("closeModal").addEventListener("click", closeModal);
@@ -85,11 +97,11 @@ document.getElementById("exportBtn").addEventListener("click", exportEvents);
 document.getElementById("importInput").addEventListener("change", importEvents);
 
 titleBtn.addEventListener("click", toggleDatePicker);
-document.getElementById("yearPrev").addEventListener("click", () => {
+yearPrevBtn.addEventListener("click", () => {
   pickerYear -= 1;
   renderMonthPickerGrid();
 });
-document.getElementById("yearNext").addEventListener("click", () => {
+yearNextBtn.addEventListener("click", () => {
   pickerYear += 1;
   renderMonthPickerGrid();
 });
@@ -113,6 +125,8 @@ searchInput.addEventListener("input", (e) => {
   searchQuery = e.target.value.trim().toLowerCase();
   render();
 });
+
+gridViewportEl.addEventListener("wheel", handleCalendarWheel, { passive: false });
 
 buildWeekdayRow();
 render();
@@ -144,15 +158,27 @@ function monthIndex(year, month) {
 }
 
 function shiftMonth(delta) {
-  anchorMonth += delta;
-  if (anchorMonth < 0) {
-    anchorMonth = 11;
-    anchorYear -= 1;
-  } else if (anchorMonth > 11) {
-    anchorMonth = 0;
-    anchorYear += 1;
-  }
+  const targetIndex = monthIndex(anchorYear, anchorMonth) + delta;
+  if (targetIndex < earliestMonthIndex || targetIndex > latestMonthIndex) return false;
+  anchorYear = Math.floor(targetIndex / 12);
+  anchorMonth = ((targetIndex % 12) + 12) % 12;
   render(delta > 0 ? "next" : "prev");
+  return true;
+}
+
+function handleCalendarWheel(event) {
+  if (event.ctrlKey) return;
+  const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+  if (!delta) return;
+
+  event.preventDefault();
+  wheelAccumulator += delta;
+  window.clearTimeout(wheelResetTimer);
+  wheelResetTimer = window.setTimeout(() => { wheelAccumulator = 0; }, 180);
+
+  if (Math.abs(wheelAccumulator) < 72) return;
+  shiftMonth(wheelAccumulator > 0 ? 1 : -1);
+  wheelAccumulator = 0;
 }
 
 function goToToday() {
@@ -218,11 +244,14 @@ function closeDatePicker() {
 
 function renderMonthPickerGrid() {
   yearLabelEl.textContent = pickerYear;
+  yearPrevBtn.disabled = pickerYear <= Math.floor(earliestMonthIndex / 12);
+  yearNextBtn.disabled = pickerYear >= Math.floor(latestMonthIndex / 12);
   monthGridEl.innerHTML = "";
   MONTH_LABELS_SHORT.forEach((label, idx) => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "month-pick-btn";
+    btn.disabled = !isMonthInRange(pickerYear, idx);
     if (pickerYear === anchorYear && idx === anchorMonth) btn.classList.add("is-selected");
     btn.textContent = label;
     btn.addEventListener("click", () => {
@@ -235,6 +264,11 @@ function renderMonthPickerGrid() {
     });
     monthGridEl.appendChild(btn);
   });
+}
+
+function isMonthInRange(year, month) {
+  const index = monthIndex(year, month);
+  return index >= earliestMonthIndex && index <= latestMonthIndex;
 }
 
 function toggleMenu() {
@@ -271,6 +305,9 @@ function buildWeekdayRow() {
 
 function render(direction) {
   rangeLabelEl.textContent = `${MONTH_LABELS[anchorMonth]} ${anchorYear}`;
+  const currentIndex = monthIndex(anchorYear, anchorMonth);
+  prevBtn.disabled = currentIndex <= earliestMonthIndex;
+  nextBtn.disabled = currentIndex >= latestMonthIndex;
   agendaDateEl.textContent = new Intl.DateTimeFormat(undefined, {
     weekday: "short", month: "short", day: "numeric",
   }).format(new Date());
