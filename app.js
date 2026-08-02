@@ -22,6 +22,7 @@ let activeDateKey = null;
 let editingEventId = null;
 let viewMode = "month"; // "month" | "agenda"
 let searchQuery = "";
+let lastFocusedElement = null;
 
 const gridViewportEl = document.getElementById("calendarGrid");
 let currentGridEl = null;
@@ -41,6 +42,9 @@ const agendaViewBtn = document.getElementById("agendaViewBtn");
 const searchInput = document.getElementById("searchInput");
 const menuBtn = document.getElementById("menuBtn");
 const menuDropdown = document.getElementById("menuDropdown");
+const agendaDateEl = document.getElementById("agendaDate");
+const mobileMonthBtn = document.getElementById("mobileMonthBtn");
+const mobileAgendaBtn = document.getElementById("mobileAgendaBtn");
 
 const modalEl = document.getElementById("dayModal");
 const modalTitleEl = document.getElementById("modalTitle");
@@ -49,24 +53,34 @@ const eventFormEl = document.getElementById("eventForm");
 const eventTitleInput = document.getElementById("eventTitle");
 const eventTimeInput = document.getElementById("eventTime");
 const eventColorSelect = document.getElementById("eventColor");
+const eventColorOptions = Array.from(document.querySelectorAll(".color-option"));
+const eventDateDisplay = document.getElementById("eventDateDisplay");
+const modalDateLabel = document.getElementById("modalDateLabel");
 const submitEventBtn = document.getElementById("submitEventBtn");
 const cancelEditBtn = document.getElementById("cancelEditBtn");
 
 document.getElementById("prevBtn").addEventListener("click", () => shiftMonth(-1));
 document.getElementById("nextBtn").addEventListener("click", () => shiftMonth(1));
 document.getElementById("todayBtn").addEventListener("click", goToToday);
+document.getElementById("newEventBtn").addEventListener("click", openNewEventForToday);
 document.getElementById("closeModal").addEventListener("click", closeModal);
+document.getElementById("cancelModalBtn").addEventListener("click", closeModal);
 modalEl.addEventListener("click", (e) => {
   if (e.target === modalEl) closeModal();
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key !== "Escape") return;
-  if (!modalEl.hidden) closeModal();
-  if (!datePickerEl.hidden) closeDatePicker();
-  if (!menuDropdown.hidden) closeMenu();
+  if (e.key === "Escape") {
+    if (!modalEl.hidden) closeModal();
+    if (!datePickerEl.hidden) closeDatePicker();
+    if (!menuDropdown.hidden) closeMenu();
+  }
+  if (e.key === "Tab" && !modalEl.hidden) trapModalFocus(e);
 });
 eventFormEl.addEventListener("submit", handleSubmitEvent);
 cancelEditBtn.addEventListener("click", exitEditMode);
+eventColorOptions.forEach((button) => {
+  button.addEventListener("click", () => selectEventColor(button.dataset.color));
+});
 document.getElementById("exportBtn").addEventListener("click", exportEvents);
 document.getElementById("importInput").addEventListener("change", importEvents);
 
@@ -92,6 +106,8 @@ menuBtn.addEventListener("click", toggleMenu);
 
 monthViewBtn.addEventListener("click", () => setViewMode("month"));
 agendaViewBtn.addEventListener("click", () => setViewMode("agenda"));
+mobileMonthBtn.addEventListener("click", () => setViewMode("month"));
+mobileAgendaBtn.addEventListener("click", () => setViewMode("agenda"));
 
 searchInput.addEventListener("input", (e) => {
   searchQuery = e.target.value.trim().toLowerCase();
@@ -154,7 +170,26 @@ function setViewMode(mode) {
   monthViewBtn.setAttribute("aria-selected", String(mode === "month"));
   agendaViewBtn.classList.toggle("is-active", mode === "agenda");
   agendaViewBtn.setAttribute("aria-selected", String(mode === "agenda"));
+  mobileMonthBtn.classList.toggle("is-active", mode === "month");
+  mobileAgendaBtn.classList.toggle("is-active", mode === "agenda");
   render();
+}
+
+function openNewEventForToday() {
+  const now = new Date();
+  anchorYear = now.getFullYear();
+  anchorMonth = now.getMonth();
+  render();
+  openModal(todayKey(), anchorYear, anchorMonth, now.getDate());
+}
+
+function selectEventColor(color) {
+  eventColorSelect.value = color;
+  eventColorOptions.forEach((button) => {
+    const selected = button.dataset.color === color;
+    button.classList.toggle("is-selected", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
 }
 
 /* ---------- Header: title / date picker / menu ---------- */
@@ -236,6 +271,9 @@ function buildWeekdayRow() {
 
 function render(direction) {
   rangeLabelEl.textContent = `${MONTH_LABELS[anchorMonth]} ${anchorYear}`;
+  agendaDateEl.textContent = new Intl.DateTimeFormat(undefined, {
+    weekday: "short", month: "short", day: "numeric",
+  }).format(new Date());
   animateLabelChange(direction);
 
   const isAgenda = viewMode === "agenda";
@@ -282,6 +320,8 @@ function matchesSearch(ev) {
 function renderMonthGrid(direction) {
   const grid = document.createElement("div");
   grid.className = "day-grid";
+  grid.setAttribute("role", "grid");
+  grid.setAttribute("aria-label", `${MONTH_LABELS[anchorMonth]} ${anchorYear}`);
   if (direction) {
     grid.classList.add(direction === "prev" ? "day-grid-anim-prev" : "day-grid-anim-next");
   } else {
@@ -320,6 +360,9 @@ function renderMonthGrid(direction) {
     const cell = document.createElement("div");
     cell.className = "day-cell" + (otherMonth ? " other-month" : "") + (key === todayK ? " today" : "");
     cell.dataset.dateKey = key;
+    cell.setAttribute("role", "gridcell");
+    cell.setAttribute("tabindex", key === todayK ? "0" : "-1");
+    cell.setAttribute("aria-label", formatFullDate(key));
 
     const numberEl = document.createElement("div");
     numberEl.className = "day-number";
@@ -358,12 +401,35 @@ function renderMonthGrid(direction) {
     }
 
     cell.addEventListener("click", () => openModal(key, cellYear, cellMonth, cellDay));
+    cell.addEventListener("keydown", (event) => handleGridKeydown(event, cell, key, cellYear, cellMonth, cellDay));
     grid.appendChild(cell);
+  }
+
+  if (!grid.querySelector('[tabindex="0"]') && grid.firstElementChild) {
+    grid.firstElementChild.tabIndex = 0;
   }
 
   if (currentGridEl) currentGridEl.remove();
   gridViewportEl.appendChild(grid);
   currentGridEl = grid;
+}
+
+function handleGridKeydown(event, cell, key, year, month, day) {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    openModal(key, year, month, day);
+    return;
+  }
+
+  const deltas = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 };
+  if (!(event.key in deltas)) return;
+  event.preventDefault();
+  const cells = Array.from(currentGridEl.querySelectorAll(".day-cell"));
+  const next = cells[cells.indexOf(cell) + deltas[event.key]];
+  if (!next) return;
+  cell.tabIndex = -1;
+  next.tabIndex = 0;
+  next.focus();
 }
 
 function renderUpcoming() {
@@ -409,6 +475,9 @@ function renderAgendaFull() {
 function buildAgendaItem(ev, skipDateLabel) {
   const li = document.createElement("li");
   li.className = "agenda-item";
+  li.style.setProperty("--event-color", `var(--tag-${ev.color || "blue"})`);
+  li.tabIndex = 0;
+  li.setAttribute("role", "button");
 
   const dot = document.createElement("span");
   dot.className = "event-color-dot";
@@ -437,6 +506,12 @@ function buildAgendaItem(ev, skipDateLabel) {
     const [y, m, d] = ev.dateKey.split("-").map(Number);
     openModal(ev.dateKey, y, m - 1, d);
   });
+  li.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      li.click();
+    }
+  });
 
   return li;
 }
@@ -444,9 +519,12 @@ function buildAgendaItem(ev, skipDateLabel) {
 /* ---------- Day modal ---------- */
 
 function openModal(key, year, month, day) {
+  lastFocusedElement = document.activeElement;
   activeDateKey = key;
   exitEditMode();
-  modalTitleEl.textContent = `${MONTH_LABELS[month]} ${day}, ${year}`;
+  modalTitleEl.textContent = "New event";
+  modalDateLabel.textContent = `${MONTH_LABELS[month]} ${day}, ${year}`;
+  eventDateDisplay.value = `${String(month + 1).padStart(2, "0")}/${String(day).padStart(2, "0")}/${year}`;
   renderEventList();
   modalEl.hidden = false;
   void modalEl.offsetWidth; // restart transition
@@ -459,8 +537,25 @@ function closeModal() {
   activeDateKey = null;
   exitEditMode();
   window.setTimeout(() => {
-    if (!modalEl.classList.contains("is-open")) modalEl.hidden = true;
+    if (!modalEl.classList.contains("is-open")) {
+      modalEl.hidden = true;
+      if (lastFocusedElement?.isConnected) lastFocusedElement.focus();
+    }
   }, 180);
+}
+
+function trapModalFocus(event) {
+  const controls = Array.from(modalEl.querySelectorAll('button:not([hidden]), input:not([hidden]), select:not([hidden])'));
+  if (!controls.length) return;
+  const first = controls[0];
+  const last = controls[controls.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function renderEventList() {
@@ -504,7 +599,7 @@ function renderEventList() {
     const editBtn = document.createElement("button");
     editBtn.type = "button";
     editBtn.className = "event-edit-btn";
-    editBtn.innerHTML = "&#9998;";
+    editBtn.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 13.5-.5 3 3-.5L15 7.5 12.5 5 4 13.5Z"/><path d="m11.5 6 2.5 2.5"/></svg>';
     editBtn.setAttribute("aria-label", "Edit detail");
     editBtn.addEventListener("click", () => enterEditMode(ev));
     actions.appendChild(editBtn);
@@ -512,7 +607,7 @@ function renderEventList() {
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
     deleteBtn.className = "event-delete-btn";
-    deleteBtn.innerHTML = "&times;";
+    deleteBtn.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg>';
     deleteBtn.setAttribute("aria-label", "Delete detail");
     deleteBtn.addEventListener("click", () => deleteEvent(ev.id));
     actions.appendChild(deleteBtn);
@@ -527,7 +622,9 @@ function enterEditMode(ev) {
   eventTitleInput.value = ev.title;
   eventTimeInput.value = ev.time || "";
   eventColorSelect.value = ev.color || "blue";
-  submitEventBtn.textContent = "Save";
+  selectEventColor(ev.color || "blue");
+  modalTitleEl.textContent = "Edit event";
+  submitEventBtn.textContent = "Save changes";
   cancelEditBtn.hidden = false;
   renderEventList();
   eventTitleInput.focus();
@@ -535,9 +632,15 @@ function enterEditMode(ev) {
 
 function exitEditMode() {
   editingEventId = null;
-  submitEventBtn.textContent = "Add";
+  modalTitleEl.textContent = "New event";
+  submitEventBtn.textContent = "Save event";
   cancelEditBtn.hidden = true;
   eventFormEl.reset();
+  selectEventColor("green");
+  if (activeDateKey) {
+    const [year, month, day] = activeDateKey.split("-");
+    eventDateDisplay.value = `${month}/${day}/${year}`;
+  }
   if (activeDateKey) renderEventList();
 }
 
